@@ -239,7 +239,25 @@ ul {
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+}
+
+.draft-panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+  min-height: 12rem;
+  padding: 6px 8px;
+}
+
+.draft-panel h2 {
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
 }
 
 .app-form label {
@@ -262,6 +280,7 @@ ul {
 
 .form-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }

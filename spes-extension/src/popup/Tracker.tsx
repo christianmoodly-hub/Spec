@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   addApplication,
   deleteApplication,
   formatAuthError,
+  getProfile,
   subscribeToApplications,
   syncOwnStreakDecay,
   updateApplication,
@@ -14,13 +15,16 @@ import {
   readCaptureDraft,
 } from '../lib/capture'
 import {
+  MSG_GENERATE_DOC,
   MSG_INJECT_FALLBACK,
   MSG_PARSE_PAGE,
+  type GenerateKind,
   type SpesResponse,
 } from '../lib/messages'
 import type { Application, ApplicationStatus, NewApplication } from '../types'
 import { APPLICATION_STATUSES } from '../types'
 import { ApplicationForm } from './ApplicationForm'
+import { DraftPanel } from './DraftPanel'
 import { dueFlag, dueSortValue, formatDue } from './dueDate'
 import { STATUS_LABELS } from './status'
 import { StreakPanel } from './StreakPanel'
@@ -31,6 +35,13 @@ type View =
   | { kind: 'streak' }
   | { kind: 'add'; initial?: Partial<NewApplication>; heading: string }
   | { kind: 'edit'; item: Application }
+  | {
+      kind: 'draft'
+      item: Application
+      mode: GenerateKind
+      text: string
+      generating: boolean
+    }
 
 interface TrackerProps {
   user: User
@@ -61,6 +72,8 @@ export function Tracker({ user }: TrackerProps) {
   const [view, setView] = useState<View>({ kind: 'list' })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const generateSeq = useRef(0)
 
   useEffect(() => {
     setLoaded(false)
@@ -161,9 +174,102 @@ export function Tracker({ user }: TrackerProps) {
   }
 
   async function goBackToList(): Promise<void> {
+    generateSeq.current += 1
     setError(null)
+    setCopied(false)
     await clearCaptureDraft()
     setView({ kind: 'list' })
+  }
+
+  async function generateDoc(
+    item: Application,
+    mode: GenerateKind,
+  ): Promise<void> {
+    const seq = generateSeq.current + 1
+    generateSeq.current = seq
+    setError(null)
+    setCopied(false)
+    if (!item.description.trim()) {
+      setError('Save a job description on this application first.')
+      return
+    }
+    let profile
+    try {
+      profile = await getProfile(user.uid)
+    } catch (caught) {
+      setError(formatAuthError(caught, 'Could not load your profile.'))
+      return
+    }
+    if (!profile?.baseCV.trim()) {
+      setError('Add your base CV in Options first.')
+      return
+    }
+    setView({ kind: 'draft', item, mode, text: '', generating: true })
+    const response = (await chrome.runtime.sendMessage({
+      type: MSG_GENERATE_DOC,
+      kind: mode,
+      title: item.title,
+      company: item.company,
+      description: item.description,
+      baseCV: profile.baseCV,
+      reusableBullets: profile.reusableBullets,
+    })) as SpesResponse
+    if (seq !== generateSeq.current) {
+      return
+    }
+    if (!response?.ok || !response.text) {
+      setView({ kind: 'list' })
+      setError(
+        response && !response.ok
+          ? response.error
+          : 'Could not generate a draft.',
+      )
+      return
+    }
+    setView({
+      kind: 'draft',
+      item,
+      mode,
+      text: response.text,
+      generating: false,
+    })
+  }
+
+  async function copyDraft(text: string): Promise<void> {
+    setError(null)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+    } catch {
+      setError('Could not copy. Select the text and copy manually.')
+    }
+  }
+
+  async function saveDraftVersion(
+    item: Application,
+    mode: GenerateKind,
+    text: string,
+  ): Promise<void> {
+    const trimmed = text.trim()
+    if (!trimmed) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await updateApplication(
+        item.id,
+        mode === 'cv'
+          ? { cvVersionUsed: trimmed }
+          : { coverLetterVersionUsed: trimmed },
+      )
+      setCopied(false)
+      setView({ kind: 'list' })
+    } catch (caught) {
+      setError(formatAuthError(caught, 'Could not save this version.'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function captureCurrentPage(): Promise<void> {
@@ -205,6 +311,27 @@ export function Tracker({ user }: TrackerProps) {
       return
     }
     window.close()
+  }
+
+  if (view.kind === 'draft') {
+    return (
+      <DraftPanel
+        heading={view.mode === 'cv' ? 'Tailored CV' : 'Cover letter'}
+        text={view.text}
+        generating={view.generating}
+        busy={busy}
+        error={error}
+        notice={copied ? 'Copied.' : null}
+        onChange={(text) =>
+          setView((current) =>
+            current.kind === 'draft' ? { ...current, text } : current,
+          )
+        }
+        onCopy={() => void copyDraft(view.text)}
+        onSave={() => void saveDraftVersion(view.item, view.mode, view.text)}
+        onClose={() => void goBackToList()}
+      />
+    )
   }
 
   if (view.kind === 'add') {
@@ -275,6 +402,13 @@ export function Tracker({ user }: TrackerProps) {
         >
           Capture this page
         </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => void chrome.runtime.openOptionsPage()}
+        >
+          Options
+        </button>
       </div>
       <div className="filters" role="tablist" aria-label="Filter by status">
         <button
@@ -313,6 +447,8 @@ export function Tracker({ user }: TrackerProps) {
                     onEdit={() => setView({ kind: 'edit', item })}
                     onDelete={() => void remove(item)}
                     onOpenUrl={() => openUrl(item.url)}
+                    onTailorCv={() => void generateDoc(item, 'cv')}
+                    onCoverLetter={() => void generateDoc(item, 'cover-letter')}
                   />
                 ))}
               </ul>
@@ -328,6 +464,8 @@ export function Tracker({ user }: TrackerProps) {
                   onEdit={() => setView({ kind: 'edit', item })}
                   onDelete={() => void remove(item)}
                   onOpenUrl={() => openUrl(item.url)}
+                  onTailorCv={() => void generateDoc(item, 'cv')}
+                  onCoverLetter={() => void generateDoc(item, 'cover-letter')}
                 />
               ))}
             </ul>
@@ -344,15 +482,20 @@ function ApplicationRow({
   onEdit,
   onDelete,
   onOpenUrl,
+  onTailorCv,
+  onCoverLetter,
 }: {
   item: Application
   onStatus: (status: ApplicationStatus) => void
   onEdit: () => void
   onDelete: () => void
   onOpenUrl: () => void
+  onTailorCv: () => void
+  onCoverLetter: () => void
 }) {
   const flag = dueFlag(item.dueDate)
   const dueLabel = formatDue(item.dueDate)
+  const canGenerate = item.description.trim().length > 0
 
   return (
     <li className="app-row">
@@ -388,6 +531,16 @@ function ApplicationRow({
         ) : null}
       </p>
       <div className="row-actions">
+        {canGenerate ? (
+          <>
+            <button type="button" className="secondary" onClick={onTailorCv}>
+              Tailor CV
+            </button>
+            <button type="button" className="secondary" onClick={onCoverLetter}>
+              Generate cover letter
+            </button>
+          </>
+        ) : null}
         <button type="button" className="secondary" onClick={onEdit}>
           Edit
         </button>

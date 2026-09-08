@@ -1,12 +1,14 @@
 import fallbackScript from '../content-scripts/generic-fallback?script'
 import { emptyDraft, saveCaptureDraft, type CaptureDraft } from '../lib/capture'
-import { extractJobFromText } from '../lib/gemini'
+import { extractJobFromText, generateApplicationDoc } from '../lib/gemini'
 import {
   MSG_EXTRACT_GENERIC,
+  MSG_GENERATE_DOC,
   MSG_INJECT_FALLBACK,
   MSG_REMINDERS_REFRESH,
   MSG_SAVE_DRAFT,
   type ExtractGenericMessage,
+  type GenerateDocMessage,
   type InjectFallbackMessage,
   type SaveDraftMessage,
   type SpesRequest,
@@ -104,11 +106,25 @@ chrome.runtime.onMessage.addListener(
         if (message.type === MSG_REMINDERS_REFRESH) {
           await runReminderPass()
           sendResponse({ ok: true })
+          return
+        }
+
+        if (message.type === MSG_GENERATE_DOC) {
+          const payload = message as GenerateDocMessage
+          const text = await generateApplicationDoc({
+            kind: payload.kind,
+            title: payload.title,
+            company: payload.company,
+            description: payload.description,
+            baseCV: payload.baseCV,
+            reusableBullets: payload.reusableBullets,
+          })
+          sendResponse({ ok: true, text })
         }
       } catch (error) {
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : 'Capture failed.',
+          error: error instanceof Error ? error.message : 'Request failed.',
         })
       }
     })()
