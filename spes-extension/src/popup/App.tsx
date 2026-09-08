@@ -7,6 +7,7 @@ import {
   signOut,
   subscribeToAuth,
 } from '../lib/firebase'
+import { Tracker } from './Tracker'
 
 let authWindowSignInStarted = false
 
@@ -108,7 +109,7 @@ export function App() {
         </button>
       </header>
       <p className="user">{label}</p>
-      <p>Tracker list will go here.</p>
+      <Tracker user={user} />
       {error ? <p className="error">{error}</p> : null}
     </main>
   )

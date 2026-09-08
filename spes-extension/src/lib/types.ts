@@ -7,3 +7,5 @@ export type {
   Profile,
   Streak,
 } from '../types'
+
+export { APPLICATION_STATUSES } from '../types'

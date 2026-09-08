@@ -32,6 +32,7 @@ import {
   getDocs,
   getFirestore,
   initializeFirestore,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
@@ -269,6 +270,28 @@ export async function listApplications(uid: string): Promise<Application[]> {
     id: document.id,
     ...asApplicationItem(document.data()),
   }))
+}
+
+export function subscribeToApplications(
+  uid: string,
+  onNext: (items: Application[]) => void,
+  onError?: (error: unknown) => void,
+): () => void {
+  const itemsQuery = query(itemsCollection(uid), orderBy('createdAt', 'desc'))
+  return onSnapshot(
+    itemsQuery,
+    (snapshot) => {
+      onNext(
+        snapshot.docs.map((document) => ({
+          id: document.id,
+          ...asApplicationItem(document.data()),
+        })),
+      )
+    },
+    (error) => {
+      onError?.(error)
+    },
+  )
 }
 
 export async function getStreak(uid: string): Promise<Streak | null> {

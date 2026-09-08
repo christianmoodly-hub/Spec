@@ -5,6 +5,14 @@ export type ApplicationStatus =
   | 'rejected'
   | 'offer'
 
+export const APPLICATION_STATUSES: ApplicationStatus[] = [
+  'to-apply',
+  'applied',
+  'interview',
+  'rejected',
+  'offer',
+]
+
 export interface ApplicationItem {
   title: string
   company: string

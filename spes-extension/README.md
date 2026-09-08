@@ -1,6 +1,6 @@
 # Spes extension
 
-Private Manifest V3 Chrome/Edge extension for tracking job applications (two users). Firebase Auth (Google) and Firestore are wired; Gemini is not.
+Private Manifest V3 Chrome/Edge extension for tracking job applications (two users). Firebase Auth, Firestore, and Gemini job extraction are wired.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ npm run build    # production bundle into dist/
 npm run watch    # rebuild dist/ on file changes
 ```
 
-Copy `.env.example` to `.env` and fill in the Firebase web app keys, then build. Vite inlines `VITE_*` values at build time — change `.env`, then rebuild.
+Copy `.env.example` to `.env` and fill in the Firebase web app keys plus `VITE_GEMINI_API_KEY` (Google AI Studio) for generic page extraction. Vite inlines `VITE_*` values at build time — change `.env`, then rebuild.
 
 Load the unpacked extension from the `dist/` folder after a build (or after `npm run dev` has written `dist/`).
 
@@ -72,6 +72,10 @@ firebase deploy --only firestore:rules
 
 Until rules are deployed, console test-mode/default rules still apply.
 
+### Gemini (generic fallback)
+
+LinkedIn and Indeed use DOM parsers. Other sites send selected/visible text to Gemini from the **background worker** (the key is not injected into the page). Add `VITE_GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey) and rebuild. Extraction always opens the Add application form for review — nothing is auto-saved.
+
 ## Permissions (Phase 1 tradeoff)
 
 Declared in `manifest.json`:
@@ -88,7 +92,7 @@ Declared in `manifest.json`:
 
 **Not declared:** `<all_urls>`.
 
-The generic fallback script (`src/content-scripts/fallback.ts`) is bundled but **not** listed under `content_scripts`. It is meant to be injected with `chrome.scripting.executeScript` after a user gesture (toolbar click). That keeps the extension from reading every page you visit.
+The generic fallback script (`src/content-scripts/generic-fallback.ts`) is bundled but **not** listed under `content_scripts`. It is injected with `chrome.scripting.executeScript` after a user gesture (popup **Capture this page**, or the on-page panel). That keeps the extension from reading every page you visit.
 
 Tradeoff vs `<all_urls>`:
 
@@ -106,9 +110,9 @@ spes-extension/
   manifest.json
   src/
     background/          service worker
-    content-scripts/     linkedin, indeed, on-demand fallback
+    content-scripts/     linkedin, indeed, on-demand generic-fallback
     popup/               React popup + Google sign-in window
     options/             React options (base CV / profile later)
-    lib/                 firebase.ts, gemini.ts stub, types re-export
+    lib/                 firebase.ts, gemini.ts, capture helpers, types re-export
     types.ts             shared data-model types
 ```
