@@ -76,15 +76,27 @@ Until rules are deployed, console test-mode/default rules still apply.
 
 LinkedIn and Indeed use DOM parsers. Other sites send selected/visible text to Gemini from the **background worker** (the key is not injected into the page). Add `VITE_GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey) and rebuild. Extraction always opens the Add application form for review — nothing is auto-saved.
 
+### Due-date reminders
+
+The service worker does **not** query Firestore. MV3 workers sleep constantly; Firebase Auth is often not ready in time for an alarm, and Firestore listeners die with the worker.
+
+Instead the popup's Firestore snapshot writes `to-apply` items that have a due date into `chrome.storage.local`. The worker reads that cache:
+
+- on install, on browser startup, and every 3 hours (`chrome.alarms`)
+- badge = count due within 3 days (including overdue)
+- notification = overdue or due today, once per item per calendar day
+
+Open the popup after signing in so the cache stays current.
+
 ## Permissions (Phase 1 tradeoff)
 
 Declared in `manifest.json`:
 
 | Permission | Why |
 | --- | --- |
-| `storage` | Local extension state (later). |
-| `notifications` | Reminders (later). |
-| `alarms` | Scheduled checks (later). |
+| `storage` | Local reminder cache and extension state. |
+| `notifications` | Due-today / overdue alerts (to-apply items). |
+| `alarms` | Recheck due dates every 3 hours while Chrome is running. |
 | `activeTab` | Temporary access to the tab you invoked the extension on. |
 | `scripting` | Inject the generic fallback content script **on demand**. |
 | Host: `https://*.linkedin.com/*`, `https://*.indeed.com/*` | Auto-inject LinkedIn/Indeed content scripts. |

@@ -4,6 +4,7 @@ import { extractJobFromText } from '../lib/gemini'
 import {
   MSG_EXTRACT_GENERIC,
   MSG_INJECT_FALLBACK,
+  MSG_REMINDERS_REFRESH,
   MSG_SAVE_DRAFT,
   type ExtractGenericMessage,
   type InjectFallbackMessage,
@@ -11,9 +12,32 @@ import {
   type SpesRequest,
   type SpesResponse,
 } from '../lib/messages'
+import {
+  openTrackerFromNotification,
+  REMINDER_ALARM,
+  runReminderPass,
+  scheduleReminderAlarms,
+} from '../lib/reminders'
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[spes] installed')
+  void scheduleReminderAlarms()
+  void runReminderPass()
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  void scheduleReminderAlarms()
+  void runReminderPass()
+})
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === REMINDER_ALARM) {
+    void runReminderPass()
+  }
+})
+
+chrome.notifications.onClicked.addListener(() => {
+  void openTrackerFromNotification()
 })
 
 export async function injectFallbackScript(tabId: number): Promise<void> {
@@ -73,6 +97,12 @@ chrome.runtime.onMessage.addListener(
         if (message.type === MSG_INJECT_FALLBACK) {
           const { tabId } = message as InjectFallbackMessage
           await injectFallbackScript(tabId)
+          sendResponse({ ok: true })
+          return
+        }
+
+        if (message.type === MSG_REMINDERS_REFRESH) {
+          await runReminderPass()
           sendResponse({ ok: true })
         }
       } catch (error) {

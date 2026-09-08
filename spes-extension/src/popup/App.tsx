@@ -7,6 +7,7 @@ import {
   signOut,
   subscribeToAuth,
 } from '../lib/firebase'
+import { clearReminderCache } from '../lib/reminders'
 import { Tracker } from './Tracker'
 
 let authWindowSignInStarted = false
@@ -57,6 +58,7 @@ export function App() {
     setBusy(true)
     try {
       await signOut()
+      await clearReminderCache()
     } catch (caught) {
       setError(formatAuthError(caught, 'Sign-out failed.'))
     } finally {

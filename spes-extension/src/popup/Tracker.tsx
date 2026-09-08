@@ -7,6 +7,7 @@ import {
   subscribeToApplications,
   updateApplication,
 } from '../lib/firebase'
+import { syncReminderCache } from '../lib/reminders'
 import {
   clearCaptureDraft,
   readCaptureDraft,
@@ -65,6 +66,7 @@ export function Tracker({ user }: TrackerProps) {
       (next) => {
         setItems(next)
         setLoaded(true)
+        void syncReminderCache(user.uid, next)
       },
       (caught) => {
         setError(formatAuthError(caught, 'Could not load applications.'))
