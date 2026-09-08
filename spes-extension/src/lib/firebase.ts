@@ -1,29 +1,30 @@
 /**
  * Firebase Auth + Firestore.
  *
- * Google sign-in uses signInWithPopup in a real window (popup.html?auth=1),
- * not chrome.identity.getAuthToken:
- * - The toolbar popup closes as soon as it loses focus, so running the
- *   OAuth popup from there drops the result.
- * - chrome.identity needs a separate "Chrome extension" OAuth client tied
- *   to this extension ID. Firebase already has a web Google provider enabled.
- * Opening the popup page as a real window keeps the opener alive for Firebase's
- * popup flow. Add chrome-extension://<extension-id> to Authentication →
- * Settings → Authorized domains.
+ * Use only firebase/auth/web-extension here. Mixing it with firebase/auth
+ * (browser) causes auth/argument-error in chrome-extension:// pages.
+ *
+ * Google sign-in: chrome.identity.launchWebAuthFlow, then
+ * GoogleAuthProvider.credential + signInWithCredential.
+ * signInWithPopup is not in the web-extension Auth bundle.
+ *
+ * The toolbar popup dies when it loses focus, so OAuth still starts in a
+ * real window (popup.html?auth=1). Add chrome-extension://<extension-id>
+ * to Authentication → Settings → Authorized domains, and add
+ * chrome.identity.getRedirectURL() to the Web OAuth client's redirect URIs.
  */
 
 import { FirebaseError, initializeApp } from 'firebase/app'
 import {
   GoogleAuthProvider,
-  browserPopupRedirectResolver,
   getAuth,
   indexedDBLocalPersistence,
   initializeAuth,
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithCredential,
   signOut as firebaseSignOut,
   type User,
-} from 'firebase/auth'
+} from 'firebase/auth/web-extension'
 import {
   addDoc,
   collection,
@@ -60,11 +61,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
+export type { User }
+
 function createAuth() {
   try {
     return initializeAuth(app, {
       persistence: indexedDBLocalPersistence,
-      popupRedirectResolver: browserPopupRedirectResolver,
     })
   } catch {
     return getAuth(app)
@@ -177,6 +179,20 @@ async function ready(): Promise<void> {
   await auth.authStateReady()
 }
 
+function googleRedirectUri(): string {
+  return chrome.identity.getRedirectURL()
+}
+
+function isCancelledAuthError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('did not approve') ||
+    lower.includes('user rejected') ||
+    lower.includes('cancelled') ||
+    lower.includes('canceled')
+  )
+}
+
 export function formatAuthError(
   error: unknown,
   fallback = 'Sign-in failed.',
@@ -191,20 +207,84 @@ export function formatAuthError(
     return error.message
   }
   if (error instanceof Error) {
+    if (isCancelledAuthError(error.message)) {
+      return 'Google sign-in was cancelled.'
+    }
+    const lower = error.message.toLowerCase()
+    if (
+      lower.includes('redirect_uri') ||
+      lower.includes('redirect uri') ||
+      lower.includes('invalid request')
+    ) {
+      return `Add this redirect URI to the Google Web OAuth client, then retry: ${googleRedirectUri()}`
+    }
     return error.message
   }
   return fallback
 }
 
-export async function signInWithGooglePopup(): Promise<User> {
+async function launchGoogleAuthFlow(url: string): Promise<string> {
+  const responseUrl = await new Promise<string | undefined>((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow(
+      { url, interactive: true },
+      (result) => {
+        const lastError = chrome.runtime.lastError
+        if (lastError?.message) {
+          reject(new Error(lastError.message))
+          return
+        }
+        resolve(result)
+      },
+    )
+  })
+  if (!responseUrl) {
+    throw new Error('Google sign-in was cancelled.')
+  }
+  return responseUrl
+}
+
+function parseGoogleIdToken(responseUrl: string): string {
+  const parsed = new URL(responseUrl)
+  const params = new URLSearchParams(parsed.hash.replace(/^#/, ''))
+  for (const [key, value] of parsed.searchParams) {
+    if (!params.has(key)) {
+      params.set(key, value)
+    }
+  }
+  const oauthError = params.get('error')
+  if (oauthError) {
+    throw new Error(params.get('error_description') ?? oauthError)
+  }
+  const idToken = params.get('id_token')
+  if (!idToken) {
+    throw new Error(
+      `Google did not return an ID token. Add this redirect URI to the Web OAuth client: ${googleRedirectUri()}`,
+    )
+  }
+  return idToken
+}
+
+async function signInWithGoogle(): Promise<User> {
   await ready()
-  const provider = new GoogleAuthProvider()
-  provider.setCustomParameters({ prompt: 'select_account' })
-  const result = await signInWithPopup(
-    auth,
-    provider,
-    browserPopupRedirectResolver,
-  )
+  const clientId = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID?.trim()
+  if (!clientId) {
+    throw new Error(
+      'Missing VITE_GOOGLE_WEB_CLIENT_ID. Copy the Web client ID from Firebase Console → Authentication → Sign-in method → Google, add it to .env, then rebuild.',
+    )
+  }
+  const authUrl =
+    'https://accounts.google.com/o/oauth2/v2/auth?' +
+    new URLSearchParams({
+      client_id: clientId,
+      response_type: 'id_token',
+      redirect_uri: googleRedirectUri(),
+      scope: 'openid email profile',
+      nonce: crypto.randomUUID(),
+      prompt: 'select_account',
+    }).toString()
+  const responseUrl = await launchGoogleAuthFlow(authUrl)
+  const credential = GoogleAuthProvider.credential(parseGoogleIdToken(responseUrl))
+  const result = await signInWithCredential(auth, credential)
   return result.user
 }
 
@@ -214,7 +294,7 @@ export async function signIn(): Promise<User | null> {
     await openAuthWindow()
     return null
   }
-  return signInWithGooglePopup()
+  return signInWithGoogle()
 }
 
 export async function signOut(): Promise<void> {

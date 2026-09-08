@@ -16,7 +16,7 @@ npm run build    # production bundle into dist/
 npm run watch    # rebuild dist/ on file changes
 ```
 
-Copy `.env.example` to `.env` and fill in the Firebase web app keys plus `VITE_GEMINI_API_KEY` (Google AI Studio) for generic page extraction. Vite inlines `VITE_*` values at build time — change `.env`, then rebuild.
+Copy `.env.example` to `.env` and fill in the Firebase web app keys, `VITE_GOOGLE_WEB_CLIENT_ID` (Google sign-in), and `VITE_GEMINI_API_KEY` (Google AI Studio) for generic page extraction. Vite inlines `VITE_*` values at build time — change `.env`, then rebuild.
 
 Load the unpacked extension from the `dist/` folder after a build (or after `npm run dev` has written `dist/`).
 
@@ -46,17 +46,23 @@ After code changes: `npm run build` (or keep `npm run dev` / `npm run watch` run
 
 Project: `spec-6dd69`. Do not commit `.env`.
 
-### Authorized domain (required for Google sign-in)
+### Google sign-in
 
-`signInWithPopup` runs in a real window (`src/popup/index.html?auth=1`), not the toolbar popup. Add this extension's origin in Firebase Console → Authentication → Settings → Authorized domains:
+Auth uses `firebase/auth/web-extension` plus `chrome.identity.launchWebAuthFlow` (not the browser `signInWithPopup` path). The toolbar popup still opens a real window (`src/popup/index.html?auth=1`) so the OAuth flow is not killed when the toolbar popup closes.
 
-`chrome-extension://<your-extension-id>`
+1. Firebase Console → Authentication → Settings → Authorized domains — add:
 
-Copy the ID from the extension card on `chrome://extensions` or `edge://extensions`. If this is missing, sign-in fails with `auth/unauthorized-domain`.
+   `chrome-extension://<your-extension-id>`
 
-### Why not chrome.identity?
+   Copy the ID from the extension card on `chrome://extensions` or `edge://extensions`. Missing this fails with `auth/unauthorized-domain`.
 
-The toolbar popup is destroyed when it loses focus, so OAuth started there never gets a result. `chrome.identity.getAuthToken` would also need a separate Google Cloud OAuth client of type Chrome extension, tied to this ID. This project already has Firebase's web Google provider, so a dedicated auth window + `signInWithPopup` is the reliable match.
+2. Firebase Console → Authentication → Sign-in method → Google → Web client ID. Put it in `.env` as `VITE_GOOGLE_WEB_CLIENT_ID` and rebuild.
+
+3. Google Cloud Console → APIs & Services → Credentials → the **same Web** OAuth client → Authorized redirect URIs — add:
+
+   `https://<your-extension-id>.chromiumapp.org/`
+
+   That is `chrome.identity.getRedirectURL()`. `getAuthToken` is not used; it would need a separate Chrome-extension OAuth client.
 
 ### Firestore rules
 
@@ -99,6 +105,7 @@ Declared in `manifest.json`:
 | `alarms` | Recheck due dates every 3 hours while Chrome is running. |
 | `activeTab` | Temporary access to the tab you invoked the extension on. |
 | `scripting` | Inject the generic fallback content script **on demand**. |
+| `identity` | Google sign-in via `launchWebAuthFlow`. |
 | Host: `https://*.linkedin.com/*`, `https://*.indeed.com/*` | Auto-inject LinkedIn/Indeed content scripts. |
 | Host: Google / Firebase APIs | Auth + Firestore from extension pages. |
 

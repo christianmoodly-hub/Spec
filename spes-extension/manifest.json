@@ -22,7 +22,14 @@
     "service_worker": "src/background/index.ts",
     "type": "module"
   },
-  "permissions": ["storage", "notifications", "alarms", "activeTab", "scripting"],
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms",
+    "activeTab",
+    "scripting",
+    "identity"
+  ],
   "host_permissions": [
     "https://*.linkedin.com/*",
     "https://*.indeed.com/*",

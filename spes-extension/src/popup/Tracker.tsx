@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { User } from 'firebase/auth'
 import {
   addApplication,
   deleteApplication,
   formatAuthError,
   subscribeToApplications,
   updateApplication,
+  type User,
 } from '../lib/firebase'
 import { syncReminderCache } from '../lib/reminders'
 import {

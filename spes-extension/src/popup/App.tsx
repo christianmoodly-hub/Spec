@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { User } from 'firebase/auth'
 import {
   formatAuthError,
   isAuthWindow,
   signIn,
   signOut,
   subscribeToAuth,
+  type User,
 } from '../lib/firebase'
 import { clearReminderCache } from '../lib/reminders'
 import { Tracker } from './Tracker'
