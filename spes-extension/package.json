@@ -9,7 +9,9 @@
     "watch": "vite build --watch"
   },
   "dependencies": {
+    "docx": "^9.7.1",
     "firebase": "^12.18.0",
+    "jspdf": "^4.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

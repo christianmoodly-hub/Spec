@@ -1,11 +1,22 @@
 :root {
-  color: #1a1a1a;
+  --bg: #fff4f7;
+  --text: #4a1830;
+  --muted: #9a4d6e;
+  --primary: #e11d74;
+  --primary-text: #fff;
+  --chip: #ffd6e5;
+  --card: #ffe9f0;
+  --border: #f5b8cc;
+  --error: #c0154a;
+  --soon: #b35a00;
+  color: var(--text);
   font-family: Segoe UI, system-ui, sans-serif;
 }
 
 html,
 body,
 #root {
+  background: var(--bg);
   margin: 0;
   max-height: 580px;
 }
@@ -51,7 +62,7 @@ header h1,
 }
 
 p {
-  color: #444;
+  color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.4;
   margin: 0 0 12px;
@@ -59,20 +70,20 @@ p {
 
 p.user,
 p.hint {
-  color: #666;
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
 p.error {
-  color: #a40000;
+  color: var(--error);
   margin-bottom: 8px;
 }
 
 button {
-  background: #1a1a1a;
+  background: var(--primary);
   border: 0;
   border-radius: 4px;
-  color: #fff;
+  color: var(--primary-text);
   cursor: pointer;
   font-size: 0.9rem;
   padding: 8px 12px;
@@ -85,18 +96,18 @@ button:disabled {
 
 button.secondary {
   background: transparent;
-  color: #1a1a1a;
+  color: var(--primary);
   padding: 4px 8px;
   text-decoration: underline;
 }
 
 button.danger {
-  color: #a40000;
+  color: var(--error);
 }
 
 header button {
   background: transparent;
-  color: #1a1a1a;
+  color: var(--primary);
   padding: 4px 8px;
   text-decoration: underline;
 }
@@ -115,16 +126,16 @@ header button {
 }
 
 .tabs button {
-  background: #eee;
-  color: #1a1a1a;
+  background: var(--chip);
+  color: var(--text);
   flex: 1;
   font-size: 0.8rem;
   padding: 6px 8px;
 }
 
 .tabs button.active {
-  background: #1a1a1a;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-text);
 }
 
 .streak-grid {
@@ -134,13 +145,13 @@ header button {
 }
 
 .streak-card {
-  background: #f5f5f5;
+  background: var(--card);
   border-radius: 4px;
   padding: 10px;
 }
 
 .streak-card h2 {
-  color: #666;
+  color: var(--muted);
   font-size: 0.75rem;
   letter-spacing: 0.02em;
   margin-bottom: 6px;
@@ -148,7 +159,7 @@ header button {
 }
 
 .streak-stat {
-  color: #1a1a1a;
+  color: var(--text);
   font-size: 0.95rem;
   margin-bottom: 4px;
 }
@@ -159,7 +170,7 @@ header button {
 }
 
 .streak-week {
-  color: #666;
+  color: var(--muted);
   font-size: 0.75rem;
   margin: 0;
 }
@@ -172,15 +183,15 @@ header button {
 }
 
 .filters button {
-  background: #eee;
-  color: #1a1a1a;
+  background: var(--chip);
+  color: var(--text);
   font-size: 0.75rem;
   padding: 4px 8px;
 }
 
 .filters button.active {
-  background: #1a1a1a;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-text);
 }
 
 ul {
@@ -190,7 +201,7 @@ ul {
 }
 
 .app-row {
-  border-bottom: 1px solid #e6e6e6;
+  border-bottom: 1px solid var(--border);
   padding: 8px 0;
 }
 
@@ -211,7 +222,7 @@ ul {
 
 .title-link {
   background: none;
-  color: #1a1a1a;
+  color: var(--primary);
   padding: 0;
   text-decoration: underline;
 }
@@ -228,12 +239,12 @@ ul {
 }
 
 .app-meta .due.soon {
-  color: #8a5a00;
+  color: var(--soon);
   font-weight: 600;
 }
 
 .app-meta .due.overdue {
-  color: #a40000;
+  color: var(--error);
   font-weight: 600;
 }
 
@@ -246,7 +257,7 @@ ul {
 .draft-panel textarea {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font: inherit;
   min-height: 12rem;
@@ -272,7 +283,8 @@ ul {
 .app-form textarea,
 .app-form select,
 .app-row-top select {
-  border: 1px solid #ccc;
+  background: #fff;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font: inherit;
   padding: 6px 8px;

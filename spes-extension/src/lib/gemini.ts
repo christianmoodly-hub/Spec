@@ -55,7 +55,7 @@ function apiKey(): string {
 }
 
 function modelName(): string {
-  return import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash'
+  return import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.6-flash'
 }
 
 async function generateContent(options: {

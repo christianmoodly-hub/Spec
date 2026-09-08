@@ -7,6 +7,8 @@ interface DraftPanelProps {
   notice: string | null
   onChange: (value: string) => void
   onCopy: () => void
+  onDownloadWord: () => void
+  onDownloadPdf: () => void
   onSave: () => void
   onClose: () => void
 }
@@ -20,9 +22,12 @@ export function DraftPanel({
   notice,
   onChange,
   onCopy,
+  onDownloadWord,
+  onDownloadPdf,
   onSave,
   onClose,
 }: DraftPanelProps) {
+  const empty = generating || busy || !text.trim()
   return (
     <section className="draft-panel">
       <h2>{heading}</h2>
@@ -39,18 +44,16 @@ export function DraftPanel({
       {error ? <p className="error">{error}</p> : null}
       {notice ? <p className="hint">{notice}</p> : null}
       <div className="form-actions">
-        <button
-          type="button"
-          onClick={onCopy}
-          disabled={generating || busy || !text.trim()}
-        >
+        <button type="button" onClick={onCopy} disabled={empty}>
           Copy to clipboard
         </button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={generating || busy || !text.trim()}
-        >
+        <button type="button" onClick={onDownloadWord} disabled={empty}>
+          Download Word
+        </button>
+        <button type="button" onClick={onDownloadPdf} disabled={empty}>
+          Download PDF
+        </button>
+        <button type="button" onClick={onSave} disabled={empty}>
           {busy ? 'Saving…' : 'Save this version'}
         </button>
         <button
@@ -64,6 +67,7 @@ export function DraftPanel({
       </div>
       <p className="hint">
         Nothing is stored until you save this version. Close discards the draft.
+        Downloads use the text in the box now.
       </p>
     </section>
   )

@@ -28,6 +28,11 @@ import { DraftPanel } from './DraftPanel'
 import { dueFlag, dueSortValue, formatDue } from './dueDate'
 import { STATUS_LABELS } from './status'
 import { StreakPanel } from './StreakPanel'
+import {
+  downloadDraftDocx,
+  downloadDraftPdf,
+  draftFileName,
+} from '../lib/exportDraft'
 
 type Filter = 'all' | ApplicationStatus
 type View =
@@ -245,6 +250,40 @@ export function Tracker({ user }: TrackerProps) {
     }
   }
 
+  async function downloadDraft(
+    item: Application,
+    mode: GenerateKind,
+    text: string,
+    format: 'docx' | 'pdf',
+  ): Promise<void> {
+    const trimmed = text.trim()
+    if (!trimmed) {
+      return
+    }
+    setError(null)
+    setCopied(false)
+    const label = mode === 'cv' ? 'CV' : 'Cover-letter'
+    try {
+      if (format === 'docx') {
+        await downloadDraftDocx(
+          trimmed,
+          draftFileName(label, item.company, item.title, 'docx'),
+        )
+      } else {
+        await downloadDraftPdf(
+          trimmed,
+          draftFileName(label, item.company, item.title, 'pdf'),
+        )
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not download the file.',
+      )
+    }
+  }
+
   async function saveDraftVersion(
     item: Application,
     mode: GenerateKind,
@@ -328,6 +367,12 @@ export function Tracker({ user }: TrackerProps) {
           )
         }
         onCopy={() => void copyDraft(view.text)}
+        onDownloadWord={() =>
+          void downloadDraft(view.item, view.mode, view.text, 'docx')
+        }
+        onDownloadPdf={() =>
+          void downloadDraft(view.item, view.mode, view.text, 'pdf')
+        }
         onSave={() => void saveDraftVersion(view.item, view.mode, view.text)}
         onClose={() => void goBackToList()}
       />

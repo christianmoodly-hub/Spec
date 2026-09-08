@@ -1,10 +1,19 @@
 :root {
-  color: #1a1a1a;
+  --bg: #fff4f7;
+  --text: #4a1830;
+  --muted: #9a4d6e;
+  --primary: #e11d74;
+  --primary-text: #fff;
+  --border: #f5b8cc;
+  --error: #c0154a;
+  --ok: #0a6b2d;
+  color: var(--text);
   font-family: Segoe UI, system-ui, sans-serif;
 }
 
 html,
 body {
+  background: var(--bg);
   margin: 0;
 }
 
@@ -20,23 +29,23 @@ h1 {
 }
 
 p {
-  color: #444;
+  color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.45;
   margin: 0 0 12px;
 }
 
 p.hint {
-  color: #666;
+  color: var(--muted);
   font-size: 0.85rem;
 }
 
 p.error {
-  color: #a40000;
+  color: var(--error);
 }
 
 p.status {
-  color: #0a6b2d;
+  color: var(--ok);
 }
 
 label {
@@ -49,17 +58,18 @@ label {
 
 input,
 textarea {
-  border: 1px solid #ccc;
+  background: #fff;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font: inherit;
   padding: 8px;
 }
 
 button {
-  background: #1a1a1a;
+  background: var(--primary);
   border: 0;
   border-radius: 4px;
-  color: #fff;
+  color: var(--primary-text);
   cursor: pointer;
   font-size: 0.95rem;
   padding: 8px 12px;
