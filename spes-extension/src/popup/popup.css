@@ -37,7 +37,8 @@ h1 {
 
 header h1,
 .app-form h2,
-.status-group h2 {
+.status-group h2,
+.streak-card h2 {
   margin: 0;
 }
 
@@ -105,6 +106,62 @@ header button {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.tabs button {
+  background: #eee;
+  color: #1a1a1a;
+  flex: 1;
+  font-size: 0.8rem;
+  padding: 6px 8px;
+}
+
+.tabs button.active {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.streak-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.streak-card {
+  background: #f5f5f5;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.streak-card h2 {
+  color: #666;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.streak-stat {
+  color: #1a1a1a;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.streak-stat strong {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.streak-week {
+  color: #666;
+  font-size: 0.75rem;
+  margin: 0;
 }
 
 .filters {

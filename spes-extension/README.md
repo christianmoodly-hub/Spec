@@ -40,7 +40,11 @@ Same bundle; Edge is Chromium and uses this Manifest V3 package as-is.
 5. Select `spes-extension/dist`.
 6. Pin Spes and open the popup, or open **Details → Extension options**.
 
-After code changes: `npm run build` (or keep `npm run dev` / `npm run watch` running), then click **Reload** on the extension card.
+After code changes: `npm run build` (or keep `npm run dev` / `npm run watch` running), then click **Reload** on the extension card in **each** browser. Chrome and Edge keep separate copies; rebuilding does not update Edge until you reload it.
+
+Use `npm run build` and load `dist/` for daily use. `npm run dev` can open a localhost window during sign-in — that is Vite HMR, not the production extension.
+
+Chrome and Edge unpacked IDs are different. Repeat the authorized-domain and redirect-URI steps with the ID shown on `edge://extensions` (`chrome-extension://<edge-id>` and `https://<edge-id>.chromiumapp.org/`). The Google Web client ID in `.env` is shared; do not copy it again.
 
 ## Firebase
 

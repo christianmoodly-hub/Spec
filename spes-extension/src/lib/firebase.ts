@@ -37,6 +37,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   setDoc,
   updateDoc,
   type Firestore,
@@ -49,6 +50,12 @@ import type {
   Profile,
   Streak,
 } from '../types'
+import {
+  applyNewApplication,
+  asDateKey,
+  streakNeedsPersist,
+  viewStreak,
+} from './streak'
 
 const firebaseConfig = {
   apiKey: readEnv('VITE_FIREBASE_API_KEY'),
@@ -134,6 +141,16 @@ function streakDoc(uid: string) {
 
 function profileDoc(uid: string) {
   return doc(db, 'profiles', uid)
+}
+
+function asStreak(data: Record<string, unknown>): Streak {
+  const last =
+    typeof data.lastActivityDate === 'string' ? data.lastActivityDate : null
+  return {
+    currentStreak: Number(data.currentStreak ?? 0),
+    lastActivityDate: asDateKey(last),
+    applicationsThisWeek: Number(data.applicationsThisWeek ?? 0),
+  }
 }
 
 function asApplicationItem(data: Record<string, unknown>): ApplicationItem {
@@ -269,7 +286,7 @@ async function signInWithGoogle(): Promise<User> {
   const clientId = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID?.trim()
   if (!clientId) {
     throw new Error(
-      'Missing VITE_GOOGLE_WEB_CLIENT_ID. Copy the Web client ID from Firebase Console → Authentication → Sign-in method → Google, add it to .env, then rebuild.',
+      'Missing VITE_GOOGLE_WEB_CLIENT_ID. Add it to .env, run npm run build, then click Reload on this extension in chrome://extensions or edge://extensions. Load the dist/ folder in both browsers.',
     )
   }
   const authUrl =
@@ -325,7 +342,34 @@ export async function addApplication(input: NewApplication): Promise<string> {
       updatedAt: createdAt,
     }),
   )
+  await recordOwnApplicationActivity()
   return ref.id
+}
+
+async function recordOwnApplicationActivity(): Promise<void> {
+  const uid = requireUid()
+  const ref = streakDoc(uid)
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(ref)
+    const stored = snapshot.exists() ? asStreak(snapshot.data()) : null
+    transaction.set(ref, applyNewApplication(stored))
+  })
+}
+
+export async function syncOwnStreakDecay(): Promise<void> {
+  await ready()
+  const uid = auth.currentUser?.uid
+  if (!uid) {
+    return
+  }
+  const stored = await getStreak(uid)
+  if (!stored) {
+    return
+  }
+  const viewed = viewStreak(stored)
+  if (streakNeedsPersist(stored, viewed)) {
+    await updateStreak(uid, viewed)
+  }
 }
 
 export async function updateApplication(
@@ -388,13 +432,26 @@ export async function getStreak(uid: string): Promise<Streak | null> {
   if (!snapshot.exists()) {
     return null
   }
-  const data = snapshot.data()
-  return {
-    currentStreak: Number(data.currentStreak ?? 0),
-    lastActivityDate:
-      typeof data.lastActivityDate === 'string' ? data.lastActivityDate : null,
-    applicationsThisWeek: Number(data.applicationsThisWeek ?? 0),
-  }
+  return asStreak(snapshot.data())
+}
+
+export function subscribeToStreaks(
+  onNext: (byUid: Record<string, Streak>) => void,
+  onError?: (error: unknown) => void,
+): () => void {
+  return onSnapshot(
+    collection(db, 'streaks'),
+    (snapshot) => {
+      const byUid: Record<string, Streak> = {}
+      for (const document of snapshot.docs) {
+        byUid[document.id] = asStreak(document.data())
+      }
+      onNext(byUid)
+    },
+    (error) => {
+      onError?.(error)
+    },
+  )
 }
 
 export async function updateStreak(

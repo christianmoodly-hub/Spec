@@ -4,6 +4,7 @@ import {
   deleteApplication,
   formatAuthError,
   subscribeToApplications,
+  syncOwnStreakDecay,
   updateApplication,
   type User,
 } from '../lib/firebase'
@@ -22,10 +23,12 @@ import { APPLICATION_STATUSES } from '../types'
 import { ApplicationForm } from './ApplicationForm'
 import { dueFlag, dueSortValue, formatDue } from './dueDate'
 import { STATUS_LABELS } from './status'
+import { StreakPanel } from './StreakPanel'
 
 type Filter = 'all' | ApplicationStatus
 type View =
   | { kind: 'list' }
+  | { kind: 'streak' }
   | { kind: 'add'; initial?: Partial<NewApplication>; heading: string }
   | { kind: 'edit'; item: Application }
 
@@ -61,6 +64,7 @@ export function Tracker({ user }: TrackerProps) {
 
   useEffect(() => {
     setLoaded(false)
+    void syncOwnStreakDecay().catch(() => undefined)
     return subscribeToApplications(
       user.uid,
       (next) => {
@@ -232,6 +236,29 @@ export function Tracker({ user }: TrackerProps) {
 
   return (
     <section className="tracker">
+      <div className="tabs" role="tablist" aria-label="Popup sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view.kind === 'list'}
+          className={view.kind === 'list' ? 'active' : undefined}
+          onClick={() => setView({ kind: 'list' })}
+        >
+          Applications
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view.kind === 'streak'}
+          className={view.kind === 'streak' ? 'active' : undefined}
+          onClick={() => setView({ kind: 'streak' })}
+        >
+          Streak
+        </button>
+      </div>
+      {view.kind === 'streak' ? <StreakPanel user={user} /> : null}
+      {view.kind === 'list' ? (
+        <>
       <div className="tracker-toolbar">
         <button
           type="button"
@@ -305,6 +332,8 @@ export function Tracker({ user }: TrackerProps) {
               ))}
             </ul>
           )}
+        </>
+      ) : null}
     </section>
   )
 }
