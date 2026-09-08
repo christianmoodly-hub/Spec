@@ -196,8 +196,14 @@ async function ready(): Promise<void> {
   await auth.authStateReady()
 }
 
-function googleRedirectUri(): string {
-  return chrome.identity.getRedirectURL()
+export function getGoogleSignInSetup(): {
+  extensionId: string
+  redirectUri: string
+} {
+  return {
+    extensionId: chrome.runtime.id,
+    redirectUri: chrome.identity.getRedirectURL(),
+  }
 }
 
 function isCancelledAuthError(message: string): boolean {
@@ -233,7 +239,7 @@ export function formatAuthError(
       lower.includes('redirect uri') ||
       lower.includes('invalid request')
     ) {
-      return `Add this redirect URI to the Google Web OAuth client, then retry: ${googleRedirectUri()}`
+      return `Add this redirect URI to the Google Web OAuth client, then retry: ${getGoogleSignInSetup().redirectUri}`
     }
     return error.message
   }
@@ -275,7 +281,7 @@ function parseGoogleIdToken(responseUrl: string): string {
   const idToken = params.get('id_token')
   if (!idToken) {
     throw new Error(
-      `Google did not return an ID token. Add this redirect URI to the Web OAuth client: ${googleRedirectUri()}`,
+      `Google did not return an ID token. Add this redirect URI to the Web OAuth client: ${getGoogleSignInSetup().redirectUri}`,
     )
   }
   return idToken
@@ -294,7 +300,7 @@ async function signInWithGoogle(): Promise<User> {
     new URLSearchParams({
       client_id: clientId,
       response_type: 'id_token',
-      redirect_uri: googleRedirectUri(),
+      redirect_uri: getGoogleSignInSetup().redirectUri,
       scope: 'openid email profile',
       nonce: crypto.randomUUID(),
       prompt: 'select_account',

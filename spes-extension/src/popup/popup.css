@@ -79,6 +79,18 @@ p.error {
   margin-bottom: 8px;
 }
 
+.setup-line {
+  font-size: 0.75rem;
+  margin-bottom: 8px;
+}
+
+.setup-line code {
+  display: block;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 button {
   background: var(--primary);
   border: 0;

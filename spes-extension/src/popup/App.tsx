@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   formatAuthError,
+  getGoogleSignInSetup,
   isAuthWindow,
   signIn,
   signOut,
@@ -67,10 +68,24 @@ export function App() {
   }
 
   if (authWindow) {
+    const setup = getGoogleSignInSetup()
     return (
       <main>
         <h1>Spes</h1>
         <p>{error ?? 'Opening Google sign-in…'}</p>
+        {error ? (
+          <>
+            <p className="hint">Send these to your partner:</p>
+            <p className="setup-line">
+              Firebase domain
+              <code>chrome-extension://{setup.extensionId}</code>
+            </p>
+            <p className="setup-line">
+              Google Cloud redirect URI
+              <code>{setup.redirectUri}</code>
+            </p>
+          </>
+        ) : null}
       </main>
     )
   }
@@ -85,6 +100,7 @@ export function App() {
   }
 
   if (!user) {
+    const setup = getGoogleSignInSetup()
     return (
       <main>
         <h1>Spes</h1>
@@ -96,6 +112,26 @@ export function App() {
           A window will open for Google. Reopen this popup after you finish.
         </p>
         {error ? <p className="error">{error}</p> : null}
+        <p className="hint">If Google says “invalid request”, send these to your partner:</p>
+        <p className="setup-line">
+          Firebase domain
+          <code>chrome-extension://{setup.extensionId}</code>
+        </p>
+        <p className="setup-line">
+          Google Cloud redirect URI
+          <code>{setup.redirectUri}</code>
+        </p>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() =>
+            void navigator.clipboard.writeText(
+              `chrome-extension://${setup.extensionId}\n${setup.redirectUri}`,
+            )
+          }
+        >
+          Copy both
+        </button>
       </main>
     )
   }
