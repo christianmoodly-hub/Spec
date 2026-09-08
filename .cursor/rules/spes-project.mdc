@@ -1,0 +1,33 @@
+---
+description: Spes project context — private two-user job-application tracker Chrome extension
+alwaysApply: true
+---
+
+# Spes
+
+Private Chrome and microsoft edge extension (Manifest V3) for two users only — not a public product. Tracks job applications together.
+
+## Stack
+
+- Manifest V3, TypeScript
+- React for popup and options UI
+- Firebase Auth + Firestore as the shared backend
+- Google Gemini API for job-info extraction and CV / cover-letter generation
+- Vite for the extension bundle
+
+## Two-user privacy
+
+- Each user signs in with Firebase Auth (Google sign-in is fine).
+- Each user has a private `applications` collection. Do not expose one user's application details to the other.
+- Both users can read a shared `streaks` document/collection so they can see each other's activity only.
+
+## Data model
+
+- `applications/{uid}/items/{appId}`: `title`, `company`, `url`, `description`, `status` (`to-apply` | `applied` | `interview` | `rejected` | `offer`), `dueDate` (nullable), `notes`, `createdAt`, `updatedAt`, `cvVersionUsed` (optional), `coverLetterVersionUsed` (optional)
+- `streaks/{uid}`: `currentStreak`, `lastActivityDate`, `applicationsThisWeek`
+- `profiles/{uid}`: `baseCV` (text or structured), `reusableBullets` (array of strings), `displayName`
+
+## Product rules
+
+- Never auto-save data extracted from a webpage without the user reviewing it first in a form. Extraction is a suggestion, not a commit.
+- Keep the UI minimal and fast. Favor working functionality over visual polish at this stage.

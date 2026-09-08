@@ -1,0 +1,76 @@
+:root {
+  color: #1a1a1a;
+  font-family: Segoe UI, system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+#root {
+  min-width: 320px;
+}
+
+main {
+  box-sizing: border-box;
+  padding: 16px;
+  width: 360px;
+}
+
+header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+h1 {
+  font-size: 1.15rem;
+  margin: 0 0 8px;
+}
+
+header h1 {
+  margin: 0;
+}
+
+p {
+  color: #444;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0 0 12px;
+}
+
+p.user,
+p.hint {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+p.error {
+  color: #a40000;
+  margin-bottom: 0;
+}
+
+button {
+  background: #1a1a1a;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 8px 12px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+header button {
+  background: transparent;
+  color: #1a1a1a;
+  padding: 4px 8px;
+  text-decoration: underline;
+}

@@ -1,0 +1,27 @@
+:root {
+  color: #1a1a1a;
+  font-family: Segoe UI, system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+main {
+  box-sizing: border-box;
+  max-width: 40rem;
+  padding: 24px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 8px;
+}
+
+p {
+  color: #444;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  margin: 0;
+}

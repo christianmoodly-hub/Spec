@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Spes",
+  "description": "Private job application tracker for two people.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "Spes",
+    "default_popup": "src/popup/index.html"
+  },
+  "options_page": "src/options/index.html",
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "permissions": ["storage", "notifications", "alarms", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://*.indeed.com/*",
+    "https://*.googleapis.com/*",
+    "https://*.gstatic.com/*",
+    "https://*.firebaseapp.com/*",
+    "https://*.firebasestorage.app/*",
+    "https://accounts.google.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["src/content-scripts/linkedin.ts"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.indeed.com/*"],
+      "js": ["src/content-scripts/indeed.ts"],
+      "run_at": "document_idle"
+    }
+  ]
+}
