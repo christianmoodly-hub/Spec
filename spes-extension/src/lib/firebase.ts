@@ -15,6 +15,7 @@
 import { FirebaseError, initializeApp } from 'firebase/app'
 import {
   GoogleAuthProvider,
+  browserPopupRedirectResolver,
   getAuth,
   indexedDBLocalPersistence,
   initializeAuth,
@@ -61,7 +62,10 @@ const app = initializeApp(firebaseConfig)
 
 function createAuth() {
   try {
-    return initializeAuth(app, { persistence: indexedDBLocalPersistence })
+    return initializeAuth(app, {
+      persistence: indexedDBLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    })
   } catch {
     return getAuth(app)
   }
@@ -181,8 +185,8 @@ export function formatAuthError(
     if (error.code === 'auth/unauthorized-domain') {
       return 'Add chrome-extension://<this-extension-id> to Firebase Authentication → Settings → Authorized domains. Copy the ID from chrome://extensions or edge://extensions.'
     }
-    if (error.code === 'auth/popup-closed-by-user') {
-      return 'Sign-in was cancelled.'
+    if (error.code === 'auth/argument-error') {
+      return 'Google sign-in failed to start. Reload the unpacked dist/ folder after rebuilding.'
     }
     return error.message
   }
@@ -196,7 +200,11 @@ export async function signInWithGooglePopup(): Promise<User> {
   await ready()
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
-  const result = await signInWithPopup(auth, provider)
+  const result = await signInWithPopup(
+    auth,
+    provider,
+    browserPopupRedirectResolver,
+  )
   return result.user
 }
 
