@@ -254,6 +254,49 @@ describe('matchField customFields and eeoAnswers', () => {
       value: 'No',
     })
   })
+
+  it('matches a custom label to the form control name', () => {
+    const withPhone = profile({
+      customFields: { Phone: '082 000 0000' },
+    })
+    expect(
+      matchField(
+        field({ name: 'job_application[phone]', type: 'tel' }),
+        withPhone,
+      ),
+    ).toMatchObject({
+      key: 'customFields',
+      value: '082 000 0000',
+    })
+  })
+
+  it('matches a saved custom question that appears in a longer label', () => {
+    const withVisa = profile({
+      customFields: {
+        'Do you need visa sponsorship': 'No',
+      },
+    })
+    expect(
+      matchField(
+        field({ label: 'Do you need visa sponsorship? *' }),
+        withVisa,
+      ),
+    ).toMatchObject({
+      key: 'customFields',
+      value: 'No',
+    })
+  })
+
+  it('prefers a custom field over a structured synonym', () => {
+    const withCustomEmail = profile({
+      email: 'ada@example.com',
+      customFields: { Email: 'notes@example.com' },
+    })
+    expect(matchField(field({ label: 'Email' }), withCustomEmail)).toMatchObject({
+      key: 'customFields',
+      value: 'notes@example.com',
+    })
+  })
 })
 
 describe('matchField unmatched', () => {

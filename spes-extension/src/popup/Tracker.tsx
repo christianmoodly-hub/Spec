@@ -91,6 +91,7 @@ export function Tracker({ user }: TrackerProps) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<Application | null>(null)
   const generateSeq = useRef(0)
 
   useEffect(() => {
@@ -122,6 +123,25 @@ export function Tracker({ user }: TrackerProps) {
       })
     })
   }, [])
+
+  useEffect(() => {
+    if (view.kind !== 'list') {
+      setPendingDelete(null)
+    }
+  }, [view.kind])
+
+  useEffect(() => {
+    if (!pendingDelete) {
+      return
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !busy) {
+        setPendingDelete(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pendingDelete, busy])
 
   const visible = useMemo(() => {
     const filtered =
@@ -179,15 +199,30 @@ export function Tracker({ user }: TrackerProps) {
   }
 
   async function remove(item: Application): Promise<void> {
-    const confirmed = window.confirm(`Delete “${item.title}” at ${item.company}?`)
-    if (!confirmed) {
+    setPendingDelete(item)
+  }
+
+  function cancelRemove(): void {
+    if (busy) {
       return
     }
+    setPendingDelete(null)
+  }
+
+  async function confirmRemove(): Promise<void> {
+    if (!pendingDelete) {
+      return
+    }
+    const item = pendingDelete
     setError(null)
+    setBusy(true)
     try {
       await deleteApplication(item.id)
+      setPendingDelete(null)
     } catch (caught) {
       setError(formatAuthError(caught, 'Could not delete application.'))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -525,6 +560,47 @@ export function Tracker({ user }: TrackerProps) {
             </ul>
           )}
         </>
+      ) : null}
+      {pendingDelete ? (
+        <div
+          className="confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+        >
+          <button
+            type="button"
+            className="confirm-backdrop"
+            aria-label="Cancel delete"
+            onClick={cancelRemove}
+            disabled={busy}
+          />
+          <div className="confirm-card">
+            <h2 id="delete-dialog-title">Delete application?</h2>
+            <p>
+              Remove “{pendingDelete.title}” at {pendingDelete.company}? This
+              cannot be undone.
+            </p>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="danger-fill"
+                onClick={() => void confirmRemove()}
+                disabled={busy}
+              >
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={cancelRemove}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   )

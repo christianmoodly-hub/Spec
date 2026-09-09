@@ -57,7 +57,7 @@ function asStringRecord(value: unknown): Record<string, string> {
   }
   const out: Record<string, string> = {}
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    const label = key.trim()
+    const label = key.replace(/[~*/[\]]/g, ' ').replace(/\s+/g, ' ').trim()
     if (!label) {
       continue
     }

@@ -35,13 +35,30 @@ describe('matchSelectOption', () => {
     expect(matchSelectOption('United King', country)?.value).toBe('GB')
   })
 
-  it('does not guess when several options contain the needle', () => {
+  it('does not guess when several similar options contain the needle', () => {
     const yesNo: SelectOption[] = [
       { value: 'yes-auth', text: 'Yes, I am authorized' },
       { value: 'yes-sponsor', text: 'Yes, I need sponsorship' },
       { value: 'no', text: 'No' },
     ]
     expect(matchSelectOption('Yes', yesNo)).toBeNull()
+  })
+
+  it('picks the option whose text equals the saved answer', () => {
+    const yesNo: SelectOption[] = [
+      { value: 'yes', text: 'Yes' },
+      { value: 'yes-sponsor', text: 'Yes, I need sponsorship' },
+      { value: 'no', text: 'No' },
+    ]
+    expect(matchSelectOption('Yes', yesNo)?.value).toBe('yes')
+  })
+
+  it('matches a dropdown option that includes the saved value', () => {
+    expect(matchSelectOption('South Africa', [
+      { value: '', text: 'Select…' },
+      { value: 'ZA', text: 'South Africa (ZA)' },
+      { value: 'US', text: 'United States' },
+    ])?.value).toBe('ZA')
   })
 
   it('returns null for empty or unmatched values', () => {

@@ -2,8 +2,8 @@
  * Heuristic form-field matcher. Pure functions only — no DOM.
  *
  * Order:
- * 1. Synonym table vs structuredFields
- * 2. customFields, then eeoAnswers (exact / near-exact question labels)
+ * 1. customFields, then eeoAnswers (labels the user saved from real forms)
+ * 2. Synonym table vs structuredFields
  * 3. unmatched — never guess
  */
 
@@ -121,6 +121,26 @@ const WRAP_NOISE = new Set([
   'com',
 ])
 
+const CUSTOM_WRAP_NOISE = new Set([
+  ...WRAP_NOISE,
+  'job',
+  'application',
+  'applications',
+  'candidate',
+  'answer',
+  'answers',
+  'question',
+  'questions',
+  'field',
+  'fields',
+  'value',
+  'values',
+  'data',
+  'identity',
+  'asterisk',
+  'req',
+])
+
 const QUESTION_PREFIXES = [
   'please enter your',
   'please provide your',
@@ -170,11 +190,6 @@ export function matchField(
     return UNMATCHED
   }
 
-  const synonymMatch = matchSynonym(field, structuredFields)
-  if (synonymMatch) {
-    return synonymMatch
-  }
-
   const customMatch = matchRecord(
     field,
     structuredFields.customFields,
@@ -191,6 +206,11 @@ export function matchField(
   )
   if (eeoMatch) {
     return eeoMatch
+  }
+
+  const synonymMatch = matchSynonym(field, structuredFields)
+  if (synonymMatch) {
+    return synonymMatch
   }
 
   return UNMATCHED
@@ -233,33 +253,41 @@ function matchRecord(
     return null
   }
 
-  const label = field.label.trim()
-  if (label) {
-    const hit = bestRecordMatch(label, entries, true)
-    if (hit) {
-      return { status: 'matched', value: hit.value, key, recordKey: hit.recordKey }
+  let best: { recordKey: string; value: string; score: number } | null = null
+  for (const haystack of fieldHaystacks(field)) {
+    const hit = bestRecordMatch(haystack, entries, true)
+    if (hit && (!best || hit.score > best.score)) {
+      best = hit
     }
   }
+  if (!best) {
+    return null
+  }
+  return {
+    status: 'matched',
+    value: best.value,
+    key,
+    recordKey: best.recordKey,
+  }
+}
 
-  const placeholder = field.placeholder.trim()
-  if (placeholder) {
-    const hit = bestRecordMatch(placeholder, entries, true)
-    if (hit) {
-      return { status: 'matched', value: hit.value, key, recordKey: hit.recordKey }
+function fieldHaystacks(field: ScannedField): string[] {
+  const out: string[] = []
+  const push = (value: string): void => {
+    const trimmed = value.trim()
+    if (trimmed) {
+      out.push(trimmed)
     }
   }
-
-  for (const raw of [field.name, field.id]) {
-    if (!raw.trim()) {
-      continue
-    }
-    const hit = bestRecordMatch(identToText(raw), entries, false)
-    if (hit) {
-      return { status: 'matched', value: hit.value, key, recordKey: hit.recordKey }
-    }
+  push(field.label)
+  push(field.placeholder)
+  if (field.name.trim()) {
+    push(identToText(field.name))
   }
-
-  return null
+  if (field.id.trim()) {
+    push(identToText(field.id))
+  }
+  return out
 }
 
 function bestRecordMatch(
@@ -298,16 +326,25 @@ export function labelSimilarity(
   }
   const ta = a.split(' ')
   const tb = b.split(' ')
-  if (Math.min(ta.length, tb.length) <= 2) {
-    return 0
+  if (tb.length >= 2 && containsPhrase(ta, tb)) {
+    return 0.92
+  }
+  if (ta.length >= 2 && containsPhrase(tb, ta)) {
+    return 0.9
+  }
+  if (tb.length === 1 && isCustomWrapped(ta, tb)) {
+    return 0.86
+  }
+  if (ta.length === 1 && isCustomWrapped(tb, ta)) {
+    return 0.84
   }
   const jaccard = tokenJaccard(ta, tb)
-  if (jaccard >= 0.8) {
+  if (Math.min(ta.length, tb.length) >= 2 && jaccard >= 0.7) {
     return jaccard
   }
   const [shorter, longer] = ta.length <= tb.length ? [a, b] : [b, a]
-  if (shorter.split(' ').length >= 4 && longer.includes(shorter)) {
-    return 0.75
+  if (shorter.split(' ').length >= 3 && longer.includes(shorter)) {
+    return 0.72
   }
   return 0
 }
@@ -468,6 +505,25 @@ function tokenJaccard(left: string[], right: string[]): number {
 
 function isWrapNoise(token: string): boolean {
   return WRAP_NOISE.has(token) || /^\d+$/.test(token)
+}
+
+function isCustomWrapped(haystack: string[], synonym: string[]): boolean {
+  const start = indexOfPhrase(haystack, synonym)
+  if (start < 0) {
+    return false
+  }
+  const end = start + synonym.length
+  for (let i = 0; i < start; i += 1) {
+    if (!CUSTOM_WRAP_NOISE.has(haystack[i]) && !/^\d+$/.test(haystack[i])) {
+      return false
+    }
+  }
+  for (let i = end; i < haystack.length; i += 1) {
+    if (!CUSTOM_WRAP_NOISE.has(haystack[i]) && !/^\d+$/.test(haystack[i])) {
+      return false
+    }
+  }
+  return true
 }
 
 function compileSynonyms(): CompiledSynonym[] {

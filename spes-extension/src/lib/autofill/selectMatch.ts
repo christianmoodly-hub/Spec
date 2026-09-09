@@ -32,6 +32,8 @@ export function matchSelectOption(
     return null
   }
 
+  const foldedNeedle = fold(needle)
+
   const exactText = usable.filter((option) => option.text.trim() === needle)
   if (exactText.length === 1) {
     return exactText[0]
@@ -42,31 +44,63 @@ export function matchSelectOption(
     return exactValue[0]
   }
 
-  const lower = needle.toLowerCase()
-  const ciText = usable.filter(
-    (option) => option.text.trim().toLowerCase() === lower,
+  const foldedText = usable.filter(
+    (option) => fold(option.text) === foldedNeedle,
   )
-  if (ciText.length === 1) {
-    return ciText[0]
+  if (foldedText.length === 1) {
+    return foldedText[0]
   }
 
-  const ciValue = usable.filter(
-    (option) => option.value.trim().toLowerCase() === lower,
+  const foldedValue = usable.filter(
+    (option) => fold(option.value) === foldedNeedle,
   )
-  if (ciValue.length === 1) {
-    return ciValue[0]
+  if (foldedValue.length === 1) {
+    return foldedValue[0]
   }
 
-  const substring = usable.filter((option) => {
-    const text = option.text.trim().toLowerCase()
-    if (!text) {
+  const containing = usable.filter((option) => {
+    const text = fold(option.text)
+    const value = fold(option.value)
+    if (!text && !value) {
       return false
     }
-    return text.includes(lower) || (text.length >= 3 && lower.includes(text))
+    return (
+      text.includes(foldedNeedle) ||
+      value.includes(foldedNeedle) ||
+      (foldedNeedle.length >= 3 &&
+        (foldedNeedle.includes(text) || foldedNeedle.includes(value)))
+    )
   })
-  if (substring.length === 1) {
-    return substring[0]
+  if (containing.length === 1) {
+    return containing[0]
+  }
+  if (containing.length > 1) {
+    const prefix = containing.filter((option) => {
+      const text = fold(option.text)
+      return text === foldedNeedle || text.startsWith(`${foldedNeedle} `)
+    })
+    if (prefix.length === 1) {
+      return prefix[0]
+    }
+    const shortest = [...containing].sort(
+      (left, right) => fold(left.text).length - fold(right.text).length,
+    )
+    if (
+      fold(shortest[0].text).length + 8 <
+      fold(shortest[1].text).length
+    ) {
+      return shortest[0]
+    }
   }
 
   return null
+}
+
+function fold(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
