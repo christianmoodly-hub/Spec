@@ -111,6 +111,15 @@ export function mountSavePanel(options: {
   }
 }
 
+export function setSavePanelStatus(hostId: string, text: string): void {
+  const status = document
+    .getElementById(hostId)
+    ?.shadowRoot?.querySelector('.status')
+  if (status) {
+    status.textContent = text
+  }
+}
+
 function bindAction(
   button: HTMLButtonElement,
   other: HTMLButtonElement | null,

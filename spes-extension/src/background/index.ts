@@ -9,6 +9,12 @@ import {
   fillUnmatchedFields,
 } from '../lib/gemini'
 import {
+  FILL_TOKENS_KEY,
+  FILL_TOKEN_TTL_MS,
+  pruneFillTokens,
+} from '../lib/autofill/fillBroadcast'
+import {
+  MSG_BEGIN_FILL,
   MSG_EXTRACT_GENERIC,
   MSG_FILL_UNMATCHED,
   MSG_GENERATE_DOC,
@@ -18,6 +24,7 @@ import {
   MSG_PARSE_PROFILE,
   MSG_REMINDERS_REFRESH,
   MSG_SAVE_DRAFT,
+  MSG_VERIFY_FILL,
   type ExtractGenericMessage,
   type FillUnmatchedMessage,
   type GenerateDocMessage,
@@ -27,6 +34,7 @@ import {
   type SaveDraftMessage,
   type SpesRequest,
   type SpesResponse,
+  type VerifyFillMessage,
 } from '../lib/messages'
 import { emptyStructuredFields } from '../lib/profileFields'
 import { logSpesError } from '../lib/autofill/debugLog'
@@ -83,6 +91,45 @@ async function openReviewUi(): Promise<void> {
 async function stashAndOpen(draft: CaptureDraft): Promise<void> {
   await saveCaptureDraft(draft)
   await openReviewUi()
+}
+
+async function readFillTokens(): Promise<Record<string, number>> {
+  const stored = await chrome.storage.local.get(FILL_TOKENS_KEY)
+  const value = stored[FILL_TOKENS_KEY]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  const tokens: Record<string, number> = {}
+  for (const [token, expiresAt] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    if (typeof expiresAt === 'number') {
+      tokens[token] = expiresAt
+    }
+  }
+  return tokens
+}
+
+async function issueFillToken(): Promise<string> {
+  const token = crypto.randomUUID()
+  const tokens = pruneFillTokens(await readFillTokens(), Date.now())
+  tokens[token] = Date.now() + FILL_TOKEN_TTL_MS
+  await chrome.storage.local.set({ [FILL_TOKENS_KEY]: tokens })
+  return token
+}
+
+async function fillTokenIsValid(token: string): Promise<boolean> {
+  if (!token || token.length > 80) {
+    return false
+  }
+  const now = Date.now()
+  const stored = await readFillTokens()
+  const tokens = pruneFillTokens(stored, now)
+  if (Object.keys(tokens).length !== Object.keys(stored).length) {
+    await chrome.storage.local.set({ [FILL_TOKENS_KEY]: tokens })
+  }
+  const expiresAt = tokens[token]
+  return typeof expiresAt === 'number' && expiresAt > now
 }
 
 chrome.runtime.onMessage.addListener(
@@ -193,6 +240,22 @@ chrome.runtime.onMessage.addListener(
             await logSpesError('fill-unmatched', error)
             sendResponse({ ok: true, answers: {} })
           }
+          return
+        }
+
+        if (message.type === MSG_BEGIN_FILL) {
+          const token = await issueFillToken()
+          sendResponse({ ok: true, token })
+          return
+        }
+
+        if (message.type === MSG_VERIFY_FILL) {
+          const { token } = message as VerifyFillMessage
+          if (await fillTokenIsValid(token)) {
+            sendResponse({ ok: true })
+            return
+          }
+          sendResponse({ ok: false, error: 'Invalid fill token.' })
           return
         }
       } catch (error) {

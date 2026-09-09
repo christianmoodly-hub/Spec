@@ -25,8 +25,16 @@ import {
   type FillSource,
 } from '../lib/autofill/session'
 import {
+  FILL_RELAY_EVERY_MS,
+  FILL_RELAY_MS,
+  fillTokenFromEventData,
+  makeFillPageMessage,
+} from '../lib/autofill/fillBroadcast'
+import {
+  MSG_BEGIN_FILL,
   MSG_FILL_UNMATCHED,
   MSG_GET_PROFILE_FIELDS,
+  MSG_VERIFY_FILL,
   type UnmatchedFormField,
   type SpesRequest,
   type SpesResponse,
@@ -35,7 +43,7 @@ import { emptyStructuredFields } from '../lib/profileFields'
 import type { ProfileStructuredFields } from '../types'
 import { normalizeText } from './dom'
 import { dismissFillReview, showFillReview } from './fillReview'
-import { mountSavePanel } from './savePanel'
+import { mountSavePanel, setSavePanelStatus } from './savePanel'
 
 const HOST_ID = 'spes-autofill-root'
 const TEXT_TYPES = new Set(['text', 'email', 'tel', 'number', 'url', 'search'])
@@ -91,6 +99,20 @@ function collectControls(root: Document | ShadowRoot): HTMLElement[] {
       continue
     }
     out.push(...collectControls(node.shadowRoot))
+  }
+  return out
+}
+
+function collectIframes(root: Document | ShadowRoot): HTMLIFrameElement[] {
+  const out = [...root.querySelectorAll('iframe')]
+  for (const node of root.querySelectorAll('*')) {
+    if (!(node instanceof HTMLElement) || !node.shadowRoot) {
+      continue
+    }
+    if (node.id.startsWith('spes-')) {
+      continue
+    }
+    out.push(...collectIframes(node.shadowRoot))
   }
   return out
 }
@@ -777,6 +799,16 @@ async function copyDebugLog(): Promise<void> {
 }
 
 async function autofill(setStatus: (text: string) => void): Promise<void> {
+  const controls = collectControls(document).filter(isDisplayed)
+  if (controls.length === 0) {
+    const nested = collectIframes(document).length
+    setStatus(
+      nested > 0
+        ? 'No fields in this frame. Fill sent to embedded forms.'
+        : 'No fields in this frame.',
+    )
+    return
+  }
   dismissFillReview()
   setStatus('Loading profile…')
   const response = await send({ type: MSG_GET_PROFILE_FIELDS })
@@ -791,7 +823,6 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
   }
   const context = compactProfileContext(fields, rawDump)
   const records: FillRecord[] = []
-  const controls = collectControls(document).filter(isDisplayed)
   const leftovers: Leftover[] = []
   let leftoverIndex = 0
 
@@ -934,6 +965,7 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
     `Filled ${records.length} on ${location.href}`,
     JSON.stringify(
       {
+        frame: window === window.top ? 'top' : 'iframe',
         filled: records.map((record) => ({
           label: record.label,
           source: record.source,
@@ -945,9 +977,16 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
       2,
     ),
   )
-  showFillReview({ records, unfilledCount })
+  if (records.length > 0) {
+    showFillReview({ records, unfilledCount })
+  }
   const extra =
     unfilledCount > 0 ? ` ${unfilledCount} left unfilled.` : ''
+  const nested = collectIframes(document).length
+  if (records.length === 0 && nested > 0) {
+    setStatus('No fields matched here. Fill sent to embedded forms.')
+    return
+  }
   setStatus(
     records.length === 0
       ? `No confident matches.${extra}`
@@ -960,24 +999,156 @@ async function copyLog(setStatus: (text: string) => void): Promise<void> {
   setStatus('Debug log copied. Paste it in chat.')
 }
 
-function shouldMount(): boolean {
-  if (window === window.top) {
-    return true
-  }
-  return collectControls(document).length > 0
+const claimedFillTokens = new Set<string>()
+let listeningForFill = false
+
+function writePanelStatus(text: string): void {
+  setSavePanelStatus(HOST_ID, text)
 }
 
-if (shouldMount()) {
+function relayFillToChildFrames(token: string): void {
+  const payload = makeFillPageMessage(token)
+  for (const iframe of collectIframes(document)) {
+    try {
+      iframe.contentWindow?.postMessage(payload, '*')
+    } catch {
+      // Cross-origin access to the window object still allows postMessage;
+      // ignore frames that throw for other reasons.
+    }
+  }
+}
+
+function startFillRelay(token: string): void {
+  relayFillToChildFrames(token)
+  const started = Date.now()
+  const retry = window.setInterval(() => {
+    if (Date.now() - started > FILL_RELAY_MS) {
+      window.clearInterval(retry)
+      return
+    }
+    relayFillToChildFrames(token)
+  }, FILL_RELAY_EVERY_MS)
+}
+
+function notifyTopFrame(token: string): void {
+  const payload = makeFillPageMessage(token)
+  try {
+    window.top?.postMessage(payload, '*')
+  } catch {
+    window.postMessage(payload, '*')
+  }
+}
+
+async function runFill(token: string, setStatus: (text: string) => void): Promise<void> {
+  if (claimedFillTokens.has(token)) {
+    return
+  }
+  claimedFillTokens.add(token)
+  startFillRelay(token)
+  try {
+    await autofill(setStatus)
+  } catch (error) {
+    await logSpesError('autofill', error)
+    setStatus(error instanceof Error ? error.message : 'Failed.')
+  }
+}
+
+async function onFillPageMessage(event: MessageEvent): Promise<void> {
+  const token = fillTokenFromEventData(event.data)
+  if (!token || claimedFillTokens.has(token)) {
+    return
+  }
+  try {
+    const response = await send({ type: MSG_VERIFY_FILL, token })
+    if (!response.ok) {
+      return
+    }
+    await runFill(token, writePanelStatus)
+  } catch (error) {
+    await logSpesError('autofill-broadcast', error)
+  }
+}
+
+async function startFillFromPanel(setStatus: (text: string) => void): Promise<void> {
+  setStatus('Filling this page and embedded forms…')
+  const response = await send({ type: MSG_BEGIN_FILL })
+  if (!response.ok || !response.token) {
+    throw new Error(response.ok ? 'Could not start fill.' : response.error)
+  }
+  const token = response.token
+  const local = runFill(token, setStatus)
+  notifyTopFrame(token)
+  await local
+}
+
+function mountAutofillPanel(): void {
+  if (document.getElementById(HOST_ID)) {
+    return
+  }
   mountSavePanel({
     hostId: HOST_ID,
     title: 'Spes',
     actionLabel: 'Auto-fill with Spes',
     secondaryLabel: 'Copy debug log',
-    hint: 'Fills matching fields from your profile. Review before you submit.',
+    hint: 'Fills matching fields from your profile, including embedded forms. Review before you submit.',
     side: 'left',
-    onAction: autofill,
+    onAction: startFillFromPanel,
     onSecondary: copyLog,
   })
 }
+
+function watchForChildFrameFields(): void {
+  if (window === window.top || document.getElementById(HOST_ID)) {
+    return
+  }
+  const stopAt = Date.now() + 180_000
+  const tryMount = (): boolean => {
+    if (document.getElementById(HOST_ID)) {
+      return true
+    }
+    if (collectControls(document).length === 0) {
+      return false
+    }
+    mountAutofillPanel()
+    return true
+  }
+  const observer = new MutationObserver(() => {
+    if (tryMount()) {
+      cleanup()
+    }
+  })
+  const poll = window.setInterval(() => {
+    if (Date.now() > stopAt || tryMount()) {
+      cleanup()
+    }
+  }, 800)
+  const cleanup = (): void => {
+    observer.disconnect()
+    window.clearInterval(poll)
+  }
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  })
+}
+
+function startAutofillScript(): void {
+  if (!listeningForFill) {
+    listeningForFill = true
+    window.addEventListener(
+      'message',
+      (event) => {
+        void onFillPageMessage(event)
+      },
+      true,
+    )
+  }
+  if (window === window.top || collectControls(document).length > 0) {
+    mountAutofillPanel()
+  }
+  watchForChildFrameFields()
+}
+
+startAutofillScript()
 
 console.debug('[spes] autofill content script loaded')

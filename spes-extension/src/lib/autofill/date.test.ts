@@ -29,6 +29,19 @@ describe('parseFlexibleDate', () => {
       day: 14,
     })
   })
+
+  it('parses named dates like 14 Sep 2004', () => {
+    expect(parseFlexibleDate('14 Sep 2004')).toEqual({
+      year: 2004,
+      month: 9,
+      day: 14,
+    })
+    expect(parseFlexibleDate('{14 Sep 2004}')).toEqual({
+      year: 2004,
+      month: 9,
+      day: 14,
+    })
+  })
 })
 
 describe('formatDateForField', () => {
@@ -38,9 +51,9 @@ describe('formatDateForField', () => {
     )
   })
 
-  it('keeps day-first text when the field is a normal input', () => {
+  it('writes day short-month year for normal text inputs', () => {
     expect(formatDateForField('14/09/2004', 'text', 'Date of birth')).toBe(
-      '14/09/2004',
+      '14 Sep 2004',
     )
   })
 

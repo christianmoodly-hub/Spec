@@ -63,7 +63,7 @@ Rules:
 - Use ONLY facts present in the notes. Do not invent contact details, employers, dates, or answers.
 - If a field is unknown, use an empty string. For eeoAnswers and customFields, omit keys you cannot fill.
 - yearsExperience, salaryExpectation, noticePeriod, and workAuthorization stay strings (keep the person's wording).
-- dateOfBirth: keep the person's wording, or YYYY-MM-DD if they wrote an ISO date.
+- dateOfBirth: use day short-month year, like 14 Sep 2004.
 - Put recurring EEO / demographic answers in eeoAnswers, keyed by the question text.
 - Put any other repeated one-off application answers in customFields, keyed by a short label.
 - No markdown, no commentary, no extra top-level keys.`
@@ -117,6 +117,28 @@ function modelName(): string {
 const TRY_AGAIN = "That didn't work. Please try again."
 
 async function generateContent(options: {
+  system: string
+  user: string
+  temperature: number
+  json?: boolean
+}): Promise<string> {
+  let lastError: Error | null = null
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await generateContentOnce(options)
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      const waitMs = retryDelayMs(lastError.message)
+      if (waitMs == null || attempt === 1) {
+        throw lastError
+      }
+      await sleep(waitMs)
+    }
+  }
+  throw lastError ?? new Error(TRY_AGAIN)
+}
+
+async function generateContentOnce(options: {
   system: string
   user: string
   temperature: number
@@ -188,6 +210,23 @@ async function geminiHttpError(response: Response): Promise<string> {
   return snippet
     ? `Gemini HTTP ${response.status}: ${snippet}`
     : `Gemini HTTP ${response.status}`
+}
+
+function retryDelayMs(message: string): number | null {
+  if (!/429|quota|rate.?limit|resource.?exhausted/i.test(message)) {
+    return null
+  }
+  const seconds = message.match(/retry in (\d+(?:\.\d+)?)\s*s/i)
+  if (seconds) {
+    return Math.min(8_000, Math.max(1_500, Math.ceil(Number(seconds[1]) * 1000) + 250))
+  }
+  return 2_500
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }
 
 function parseModelJson(raw: string): unknown {

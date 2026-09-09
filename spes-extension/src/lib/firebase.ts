@@ -51,7 +51,7 @@ import type {
   ProfilePatch,
   Streak,
 } from '../types'
-import { asStructuredFields } from './profileFields'
+import { asStructuredFields, applyProfileDefaults } from './profileFields'
 import {
   applyNewApplication,
   asDateKey,
@@ -163,7 +163,9 @@ function asProfile(data: Record<string, unknown>): Profile {
       : [],
     displayName: String(data.displayName ?? ''),
     rawDump: String(data.rawDump ?? ''),
-    structuredFields: asStructuredFields(data.structuredFields),
+    structuredFields: applyProfileDefaults(
+      asStructuredFields(data.structuredFields),
+    ),
     lastParsedFromDump:
       typeof data.lastParsedFromDump === 'string' && data.lastParsedFromDump
         ? data.lastParsedFromDump

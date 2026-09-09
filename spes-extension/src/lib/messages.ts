@@ -18,6 +18,11 @@ export const MSG_PARSE_PROFILE = 'SPES_PARSE_PROFILE'
 export const MSG_GET_PROFILE_FIELDS = 'SPES_GET_PROFILE_FIELDS'
 export const MSG_MATCH_SELECT = 'SPES_MATCH_SELECT'
 export const MSG_FILL_UNMATCHED = 'SPES_FILL_UNMATCHED'
+export const MSG_BEGIN_FILL = 'SPES_BEGIN_FILL'
+export const MSG_VERIFY_FILL = 'SPES_VERIFY_FILL'
+
+export const FILL_PAGE_CHANNEL = 'spes-autofill'
+export const FILL_PAGE_KIND = 'run-fill'
 
 export type GenerateKind = 'cv' | 'cover-letter'
 
@@ -78,6 +83,21 @@ export type FillUnmatchedMessage = {
   profileContext: string
 }
 
+export type BeginFillMessage = {
+  type: typeof MSG_BEGIN_FILL
+}
+
+export type VerifyFillMessage = {
+  type: typeof MSG_VERIFY_FILL
+  token: string
+}
+
+export type FillPageMessage = {
+  channel: typeof FILL_PAGE_CHANNEL
+  kind: typeof FILL_PAGE_KIND
+  token: string
+}
+
 export type SpesRequest =
   | SaveDraftMessage
   | ExtractGenericMessage
@@ -89,6 +109,8 @@ export type SpesRequest =
   | GetProfileFieldsMessage
   | MatchSelectMessage
   | FillUnmatchedMessage
+  | BeginFillMessage
+  | VerifyFillMessage
 
 export type SpesResponse =
   | {
@@ -99,5 +121,6 @@ export type SpesResponse =
       rawDump?: string
       optionText?: string
       answers?: Record<string, string>
+      token?: string
     }
   | { ok: false; error: string }

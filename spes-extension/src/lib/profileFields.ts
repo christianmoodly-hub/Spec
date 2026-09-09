@@ -2,6 +2,12 @@ import type {
   ProfileAddress,
   ProfileStructuredFields,
 } from '../types'
+import { storedDateOfBirth } from './autofill/date'
+
+export const DEFAULT_CUSTOM_FIELDS: Record<string, string> = {
+  'Is there any pending misconduct or investigation against you?': 'No',
+  'Have you ever been dismissed?': 'No',
+}
 
 export function emptyAddress(): ProfileAddress {
   return {
@@ -27,7 +33,7 @@ export function emptyStructuredFields(): ProfileStructuredFields {
     noticePeriod: '',
     dateOfBirth: '',
     eeoAnswers: {},
-    customFields: {},
+    customFields: { ...DEFAULT_CUSTOM_FIELDS },
   }
 }
 
@@ -99,10 +105,32 @@ export function asStructuredFields(value: unknown): ProfileStructuredFields {
     yearsExperience: asString(record.yearsExperience).trim(),
     salaryExpectation: asString(record.salaryExpectation).trim(),
     noticePeriod: asString(record.noticePeriod).trim(),
-    dateOfBirth: asString(record.dateOfBirth).trim(),
+    dateOfBirth: storedDateOfBirth(asString(record.dateOfBirth)),
     eeoAnswers: asStringRecord(record.eeoAnswers),
     customFields: asStringRecord(record.customFields),
   }
+}
+
+export function applyProfileDefaults(
+  fields: ProfileStructuredFields,
+): ProfileStructuredFields {
+  return {
+    ...fields,
+    dateOfBirth: storedDateOfBirth(fields.dateOfBirth),
+    customFields: mergeDefaultCustomFields(fields.customFields),
+  }
+}
+
+function mergeDefaultCustomFields(
+  existing: Record<string, string>,
+): Record<string, string> {
+  const out = { ...existing }
+  for (const [key, value] of Object.entries(DEFAULT_CUSTOM_FIELDS)) {
+    if (!out[key]?.trim()) {
+      out[key] = value
+    }
+  }
+  return out
 }
 
 export const PROFILE_SCALAR_FIELDS = [

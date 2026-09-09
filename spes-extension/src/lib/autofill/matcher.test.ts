@@ -332,6 +332,33 @@ describe('matchField customFields and eeoAnswers', () => {
       value: 'notes@example.com',
     })
   })
+
+  it('matches saved screening answers for misconduct and dismissal', () => {
+    expect(
+      matchField(
+        field({
+          label: 'Is there any pending misconduct or investigation against you?',
+          type: 'select-one',
+        }),
+        emptyStructuredFields(),
+      ),
+    ).toMatchObject({
+      key: 'customFields',
+      value: 'No',
+    })
+    expect(
+      matchField(
+        field({
+          label: 'Have you ever been dismissed?',
+          type: 'select-one',
+        }),
+        emptyStructuredFields(),
+      ),
+    ).toMatchObject({
+      key: 'customFields',
+      value: 'No',
+    })
+  })
 })
 
 describe('matchField unmatched', () => {

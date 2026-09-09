@@ -31,8 +31,23 @@ const MONTHS: Record<string, number> = {
   dec: 12,
 }
 
+const MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const
+
 export function parseFlexibleDate(raw: string): DateParts | null {
-  const text = raw.trim()
+  const text = raw.trim().replace(/^[{[<]+|[}>\]]+$/g, '').trim()
   if (!text) {
     return null
   }
@@ -41,7 +56,7 @@ export function parseFlexibleDate(raw: string): DateParts | null {
     return validParts(Number(iso[1]), Number(iso[2]), Number(iso[3]))
   }
   const named = text.match(
-    /^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/i,
+    /^(\d{1,2})[.\-\s]+([a-z]+)\.?[.\-\s]+(\d{4})$/i,
   )
   if (named) {
     const month = MONTHS[named[2].toLowerCase()]
@@ -72,6 +87,16 @@ export function formatIsoDate(parts: DateParts): string {
   return `${String(parts.year).padStart(4, '0')}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
 }
 
+export function formatNamedDate(parts: DateParts): string {
+  return `${parts.day} ${MONTH_SHORT[parts.month - 1]} ${parts.year}`
+}
+
+export function storedDateOfBirth(raw: string): string {
+  const trimmed = raw.trim()
+  const parts = parseFlexibleDate(trimmed)
+  return parts ? formatNamedDate(parts) : trimmed
+}
+
 export function formatDateForField(
   raw: string,
   type: string,
@@ -98,7 +123,10 @@ export function formatDateForField(
   if (/yyyy\s*-?\s*mm\s*-?\s*dd/.test(folded) || /iso/.test(folded)) {
     return formatIsoDate(parts)
   }
-  return `${pad(parts.day)}/${pad(parts.month)}/${parts.year}`
+  if (/dd\s*\/\s*mm/.test(folded)) {
+    return `${pad(parts.day)}/${pad(parts.month)}/${parts.year}`
+  }
+  return formatNamedDate(parts)
 }
 
 export function datePartNeedles(
