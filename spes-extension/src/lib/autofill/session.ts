@@ -13,8 +13,6 @@ export interface FillSession {
   startedAt: string
 }
 
-export const SPES_FILL_SESSION_KEY = '__spesFillSession'
-
 let session: FillSession | null = null
 
 export function setFillSession(records: FillRecord[]): FillSession {
@@ -22,9 +20,6 @@ export function setFillSession(records: FillRecord[]): FillSession {
     records,
     startedAt: new Date().toISOString(),
   }
-  ;(window as unknown as Record<string, FillSession | undefined>)[
-    SPES_FILL_SESSION_KEY
-  ] = session
   return session
 }
 
