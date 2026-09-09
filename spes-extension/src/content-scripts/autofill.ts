@@ -22,6 +22,7 @@ import {
 import { emptyStructuredFields } from '../lib/profileFields'
 import type { ProfileStructuredFields } from '../types'
 import { normalizeText } from './dom'
+import { dismissFillReview, showFillReview } from './fillReview'
 import { mountSavePanel } from './savePanel'
 
 const HOST_ID = 'spes-autofill-root'
@@ -292,11 +293,66 @@ function recordFill(
   value: string,
   previousValue: string,
   source: FillSource,
-): void {
+): boolean {
   if (previousValue === value) {
-    return
+    return false
   }
   records.push({ element, label, value, previousValue, source })
+  return true
+}
+
+function isEmptyControl(
+  el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+): boolean {
+  if (el instanceof HTMLSelectElement) {
+    const selected = el.selectedOptions[0]
+    if (!el.value.trim()) {
+      return true
+    }
+    return Boolean(
+      selected &&
+        isPlaceholderOption({
+          value: selected.value,
+          text: selected.text,
+        }),
+    )
+  }
+  return !el.value.trim()
+}
+
+function countUnfilled(
+  controls: HTMLElement[],
+  records: FillRecord[],
+): number {
+  const filled = new Set<HTMLElement>(records.map((record) => record.element))
+  let count = 0
+  for (const el of controls) {
+    if (filled.has(el)) {
+      continue
+    }
+    if (el instanceof HTMLInputElement && el.type === 'file') {
+      count += 1
+      continue
+    }
+    if (el instanceof HTMLInputElement && TEXT_TYPES.has(el.type)) {
+      if (!el.disabled && !el.readOnly && isEmptyControl(el)) {
+        count += 1
+      }
+      continue
+    }
+    if (el instanceof HTMLTextAreaElement) {
+      if (!el.disabled && !el.readOnly && isEmptyControl(el)) {
+        count += 1
+      }
+      continue
+    }
+    if (el instanceof HTMLSelectElement && !el.multiple && !el.disabled) {
+      if (isEmptyControl(el)) {
+        count += 1
+      }
+    }
+  }
+  return count
 }
 
 async function pickSelectWithAi(
@@ -330,6 +386,7 @@ async function pickSelectWithAi(
 }
 
 async function autofill(setStatus: (text: string) => void): Promise<void> {
+  dismissFillReview()
   setStatus('Loading profile…')
   const response = await send({ type: MSG_GET_PROFILE_FIELDS })
   if (!response.ok) {
@@ -416,10 +473,12 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
   }
 
   setFillSession(records)
-  const files = controls.filter(
-    (node) => node instanceof HTMLInputElement && node.type === 'file',
-  ).length
-  const extra = files > 0 ? ` ${files} file field${files === 1 ? '' : 's'} need a CV by hand.` : ''
+  const unfilledCount = countUnfilled(controls, records)
+  showFillReview({ records, unfilledCount })
+  const extra =
+    unfilledCount > 0
+      ? ` ${unfilledCount} left unfilled.`
+      : ''
   setStatus(
     records.length === 0
       ? `No confident matches.${extra}`
