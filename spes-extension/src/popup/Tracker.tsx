@@ -62,6 +62,19 @@ function sortApplications(items: Application[]): Application[] {
   })
 }
 
+function formatDraftError(message: string | undefined): string {
+  if (!message) {
+    return "That didn't work. Please try again."
+  }
+  if (/base cv/i.test(message)) {
+    return 'Add your base CV in Options first.'
+  }
+  if (/description/i.test(message)) {
+    return 'Save a job description on this application first.'
+  }
+  return "That didn't work. Please try again."
+}
+
 function openUrl(url: string): void {
   if (!url) {
     return
@@ -224,11 +237,7 @@ export function Tracker({ user }: TrackerProps) {
     }
     if (!response?.ok || !response.text) {
       setView({ kind: 'list' })
-      setError(
-        response && !response.ok
-          ? response.error
-          : 'Could not generate a draft.',
-      )
+      setError(formatDraftError(response && !response.ok ? response.error : undefined))
       return
     }
     setView({

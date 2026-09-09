@@ -67,7 +67,8 @@ export function DraftPanel({
       </div>
       <p className="hint">
         Nothing is stored until you save this version. Close discards the draft.
-        Downloads use the text in the box now.
+        Downloads use the text in the box now. Word is the safer ATS upload;
+        PDF is fine for a person to read.
       </p>
     </section>
   )

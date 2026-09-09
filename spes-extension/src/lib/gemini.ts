@@ -31,12 +31,15 @@ Return ONLY valid JSON with exactly these keys:
 
 No markdown, no commentary, no extra keys. If a field is unknown, use an empty string (or null for dueDate).`
 
-const CV_PROMPT = `You tailor a CV to a job description.
+const CV_PROMPT = `You tailor a CV to one job for both ATS parsers and a human recruiter.
 Rules:
 - Use ONLY facts from the base CV and reusable bullets. Do not invent jobs, dates, employers, tools, or achievements.
-- Reorder and rephrase to match the job. Drop or shorten weaker points.
-- Return plain text only (no markdown fences, no commentary).
-- Keep it scannable: name/contact if present, then short sections.`
+- Echo keywords and phrasing from the job description only when they honestly match the base CV.
+- Reorder and rephrase to match this role. Drop or shorten weaker points.
+- Return plain text only: no markdown fences, commentary, tables, columns, icons, or graphics.
+- One column. Standard headings on their own lines, such as Summary, Skills, Experience, Education.
+- Under Experience, put job title, employer, and dates on simple lines, then short bullets that start with "- ".
+- Name and contact first if they appear in the base CV.`
 
 const COVER_PROMPT = `You write a short cover letter for a job application.
 Rules:
@@ -58,6 +61,8 @@ function modelName(): string {
   return import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.6-flash'
 }
 
+const TRY_AGAIN = "That didn't work. Please try again."
+
 async function generateContent(options: {
   system: string
   user: string
@@ -65,25 +70,27 @@ async function generateContent(options: {
   json?: boolean
 }): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName()}:generateContent?key=${encodeURIComponent(apiKey())}`
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: options.system }] },
-      contents: [{ role: 'user', parts: [{ text: options.user }] }],
-      generationConfig: {
-        temperature: options.temperature,
-        maxOutputTokens: 4096,
-        ...(options.json ? { responseMimeType: 'application/json' } : {}),
-      },
-    }),
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: options.system }] },
+        contents: [{ role: 'user', parts: [{ text: options.user }] }],
+        generationConfig: {
+          temperature: options.temperature,
+          maxOutputTokens: 4096,
+          ...(options.json ? { responseMimeType: 'application/json' } : {}),
+        },
+      }),
+    })
+  } catch {
+    throw new Error(TRY_AGAIN)
+  }
 
   if (!response.ok) {
-    const detail = await response.text()
-    throw new Error(
-      `Gemini request failed (${response.status}): ${detail.slice(0, 280)}`,
-    )
+    throw new Error(TRY_AGAIN)
   }
 
   const body = (await response.json()) as {
@@ -93,7 +100,7 @@ async function generateContent(options: {
   }
   const raw = body.candidates?.[0]?.content?.parts?.[0]?.text
   if (!raw?.trim()) {
-    throw new Error('Gemini returned an empty response.')
+    throw new Error(TRY_AGAIN)
   }
   return raw.trim()
 }
