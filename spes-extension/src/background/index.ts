@@ -6,9 +6,11 @@ import {
   generateApplicationDoc,
   parseProfileDump,
   pickSelectOption,
+  fillUnmatchedFields,
 } from '../lib/gemini'
 import {
   MSG_EXTRACT_GENERIC,
+  MSG_FILL_UNMATCHED,
   MSG_GENERATE_DOC,
   MSG_GET_PROFILE_FIELDS,
   MSG_INJECT_FALLBACK,
@@ -17,6 +19,7 @@ import {
   MSG_REMINDERS_REFRESH,
   MSG_SAVE_DRAFT,
   type ExtractGenericMessage,
+  type FillUnmatchedMessage,
   type GenerateDocMessage,
   type InjectFallbackMessage,
   type MatchSelectMessage,
@@ -26,6 +29,7 @@ import {
   type SpesResponse,
 } from '../lib/messages'
 import { emptyStructuredFields } from '../lib/profileFields'
+import { logSpesError } from '../lib/autofill/debugLog'
 import {
   openTrackerFromNotification,
   REMINDER_ALARM,
@@ -170,12 +174,29 @@ chrome.runtime.onMessage.addListener(
               heuristicValue: payload.heuristicValue,
             })
             sendResponse({ ok: true, optionText: optionText ?? 'NONE' })
-          } catch {
+          } catch (error) {
+            await logSpesError('match-select', error)
             sendResponse({ ok: true, optionText: 'NONE' })
           }
           return
         }
+
+        if (message.type === MSG_FILL_UNMATCHED) {
+          const payload = message as FillUnmatchedMessage
+          try {
+            const answers = await fillUnmatchedFields({
+              fields: payload.fields,
+              profileContext: payload.profileContext,
+            })
+            sendResponse({ ok: true, answers })
+          } catch (error) {
+            await logSpesError('fill-unmatched', error)
+            sendResponse({ ok: true, answers: {} })
+          }
+          return
+        }
       } catch (error) {
+        await logSpesError('background', error)
         sendResponse({
           ok: false,
           error: error instanceof Error ? error.message : 'Request failed.',

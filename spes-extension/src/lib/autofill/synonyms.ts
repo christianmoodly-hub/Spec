@@ -19,6 +19,7 @@ export type StructuredMatchKey =
   | 'yearsExperience'
   | 'salaryExpectation'
   | 'noticePeriod'
+  | 'dateOfBirth'
 
 export const FIELD_SYNONYMS: Record<StructuredMatchKey, readonly string[]> = {
   fullName: [
@@ -237,6 +238,15 @@ export const FIELD_SYNONYMS: Record<StructuredMatchKey, readonly string[]> = {
     'availability',
     'notice',
   ],
+  dateOfBirth: [
+    'date of birth',
+    'birth date',
+    'birthdate',
+    'birthday',
+    'born on',
+    'date born',
+    'dob',
+  ],
 }
 
 /** Phrases that mean this key should not match even if a synonym appears. */
@@ -300,5 +310,15 @@ export const FIELD_NEGATIVES: Partial<
     'last salary',
     'last drawn',
   ],
-  noticePeriod: ['relocate', 'travel', 'weekend', 'overtime'],
+  noticePeriod: ['relocate', 'travel', 'weekend', 'overtime', 'birth'],
+  dateOfBirth: [
+    'start date',
+    'available',
+    'graduation',
+    'issued',
+    'expiry',
+    'expiration',
+    'interview',
+    'visa',
+  ],
 }

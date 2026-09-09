@@ -25,7 +25,7 @@ Private Chrome and microsoft edge extension (Manifest V3) for two users only —
 
 - `applications/{uid}/items/{appId}`: `title`, `company`, `url`, `description`, `status` (`to-apply` | `applied` | `interview` | `rejected` | `offer`), `dueDate` (nullable), `notes`, `createdAt`, `updatedAt`, `cvVersionUsed` (optional), `coverLetterVersionUsed` (optional)
 - `streaks/{uid}`: `currentStreak`, `lastActivityDate`, `applicationsThisWeek`
-- `profiles/{uid}`: `baseCV`, `reusableBullets`, `displayName`, `rawDump`, `structuredFields` (`fullName`, `email`, `phone`, `address` `{street, city, stateProvince, postalCode, country}`, `linkedinUrl`, `portfolioUrl`, `workAuthorization`, `yearsExperience`, `salaryExpectation`, `noticePeriod`, `eeoAnswers`, `customFields`), `lastParsedFromDump` (ISO string or null)
+- `profiles/{uid}`: `baseCV`, `reusableBullets`, `displayName`, `rawDump`, `structuredFields` (`fullName`, `email`, `phone`, `address` `{street, city, stateProvince, postalCode, country}`, `linkedinUrl`, `portfolioUrl`, `workAuthorization`, `yearsExperience`, `salaryExpectation`, `noticePeriod`, `dateOfBirth`, `eeoAnswers`, `customFields`), `lastParsedFromDump` (ISO string or null)
 
 ## Product rules
 

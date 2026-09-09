@@ -49,6 +49,7 @@ const filled = profile({
   yearsExperience: '8',
   salaryExpectation: 'R45k–R55k',
   noticePeriod: '1 month',
+  dateOfBirth: '14/09/2004',
   eeoAnswers: {
     'Are you Hispanic or Latino?': 'No',
   },
@@ -163,6 +164,15 @@ describe('matchField synonyms', () => {
     expect(
       matchField(field({ label: 'When can you start?' }), filled),
     ).toMatchObject({ key: 'noticePeriod' })
+    expect(
+      matchField(field({ label: 'Date of birth' }), filled),
+    ).toMatchObject({ key: 'dateOfBirth', value: '14/09/2004' })
+    expect(
+      matchField(field({ label: 'Date of birth', type: 'date' }), filled),
+    ).toMatchObject({ key: 'dateOfBirth' })
+    expect(
+      matchField(field({ label: 'Start date', type: 'date' }), filled),
+    ).toEqual({ status: 'unmatched' })
   })
 
   it('uses name/id only when label is missing', () => {

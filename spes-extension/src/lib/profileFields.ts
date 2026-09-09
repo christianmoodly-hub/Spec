@@ -25,6 +25,7 @@ export function emptyStructuredFields(): ProfileStructuredFields {
     yearsExperience: '',
     salaryExpectation: '',
     noticePeriod: '',
+    dateOfBirth: '',
     eeoAnswers: {},
     customFields: {},
   }
@@ -98,6 +99,7 @@ export function asStructuredFields(value: unknown): ProfileStructuredFields {
     yearsExperience: asString(record.yearsExperience).trim(),
     salaryExpectation: asString(record.salaryExpectation).trim(),
     noticePeriod: asString(record.noticePeriod).trim(),
+    dateOfBirth: asString(record.dateOfBirth).trim(),
     eeoAnswers: asStringRecord(record.eeoAnswers),
     customFields: asStringRecord(record.customFields),
   }
@@ -113,6 +115,7 @@ export const PROFILE_SCALAR_FIELDS = [
   ['yearsExperience', 'Years of experience'],
   ['salaryExpectation', 'Salary expectation'],
   ['noticePeriod', 'Notice period'],
+  ['dateOfBirth', 'Date of birth'],
 ] as const satisfies ReadonlyArray<
   readonly [keyof Omit<
     ProfileStructuredFields,

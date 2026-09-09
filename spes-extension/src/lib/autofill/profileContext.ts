@@ -18,6 +18,7 @@ export function compactProfileContext(
   addString(body, 'yearsExperience', fields.yearsExperience)
   addString(body, 'salaryExpectation', fields.salaryExpectation)
   addString(body, 'noticePeriod', fields.noticePeriod)
+  addString(body, 'dateOfBirth', fields.dateOfBirth)
   if (Object.keys(fields.eeoAnswers).length > 0) {
     body.eeoAnswers = fields.eeoAnswers
   }

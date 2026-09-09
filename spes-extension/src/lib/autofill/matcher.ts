@@ -46,8 +46,6 @@ const UNFILLABLE_TYPES = new Set([
   'range',
   'color',
   'week',
-  'month',
-  'datetime-local',
   'time',
 ])
 
@@ -221,7 +219,7 @@ function matchSynonym(
   structuredFields: ProfileStructuredFields,
 ): FieldMatch | null {
   const type = field.type.trim().toLowerCase()
-  if (type === 'checkbox' || type === 'radio' || type === 'date') {
+  if (type === 'checkbox' || type === 'radio') {
     return null
   }
 
@@ -294,7 +292,7 @@ function bestRecordMatch(
   question: string,
   entries: Array<[string, string]>,
   allowNear: boolean,
-): { recordKey: string; value: string } | null {
+): { recordKey: string; value: string; score: number } | null {
   let best: { recordKey: string; value: string; score: number } | null = null
   for (const [recordKey, value] of entries) {
     const score = labelSimilarity(question, recordKey, allowNear)
@@ -439,6 +437,9 @@ function typeCompatible(type: string, key: StructuredMatchKey): boolean {
   }
   if (type === 'number') {
     return key === 'yearsExperience' || key === 'salaryExpectation'
+  }
+  if (type === 'date' || type === 'datetime-local' || type === 'month') {
+    return key === 'dateOfBirth'
   }
   return true
 }

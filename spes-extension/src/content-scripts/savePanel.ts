@@ -1,10 +1,14 @@
+import { logSpesError } from '../lib/autofill/debugLog'
+
 export function mountSavePanel(options: {
   hostId: string
   title: string
   actionLabel: string
   hint: string
   side?: 'left' | 'right'
+  secondaryLabel?: string
   onAction: (setStatus: (text: string) => void) => Promise<void>
+  onSecondary?: (setStatus: (text: string) => void) => Promise<void>
 }): void {
   let host = document.getElementById(options.hostId)
   if (!host) {
@@ -15,6 +19,9 @@ export function mountSavePanel(options: {
   }
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
   const side = options.side === 'left' ? 'left' : 'right'
+  const secondary = options.secondaryLabel
+    ? `<button type="button" class="secondary">${options.secondaryLabel}</button>`
+    : ''
   root.innerHTML = `
     <style>
       :host { all: initial; }
@@ -50,7 +57,19 @@ export function mountSavePanel(options: {
         cursor: pointer;
         font: inherit;
       }
-      button.action:disabled { opacity: .6; cursor: default; }
+      button.action:disabled,
+      button.secondary:disabled { opacity: .6; cursor: default; }
+      button.secondary {
+        width: 100%;
+        margin-top: 6px;
+        border: 1px solid #f5b8cc;
+        border-radius: 4px;
+        background: #fff;
+        color: #9a4d6e;
+        padding: 6px;
+        cursor: pointer;
+        font: inherit;
+      }
       button.close {
         background: transparent;
         border: 0;
@@ -69,10 +88,12 @@ export function mountSavePanel(options: {
       </div>
       <p>${options.hint}</p>
       <button type="button" class="action">${options.actionLabel}</button>
+      ${secondary}
       <p class="status"></p>
     </div>
   `
   const button = root.querySelector<HTMLButtonElement>('button.action')
+  const extra = root.querySelector<HTMLButtonElement>('button.secondary')
   const close = root.querySelector<HTMLButtonElement>('button.close')
   const status = root.querySelector('.status')
   if (!button || !close || !status) {
@@ -84,16 +105,35 @@ export function mountSavePanel(options: {
   close.addEventListener('click', () => {
     host.remove()
   })
+  bindAction(button, extra, setStatus, options.onAction)
+  if (extra && options.onSecondary) {
+    bindAction(extra, button, setStatus, options.onSecondary)
+  }
+}
+
+function bindAction(
+  button: HTMLButtonElement,
+  other: HTMLButtonElement | null,
+  setStatus: (text: string) => void,
+  run: (setStatus: (text: string) => void) => Promise<void>,
+): void {
   button.addEventListener('click', () => {
     void (async () => {
       button.disabled = true
+      if (other) {
+        other.disabled = true
+      }
       setStatus('')
       try {
-        await options.onAction(setStatus)
+        await run(setStatus)
       } catch (error) {
+        await logSpesError('panel', error)
         setStatus(error instanceof Error ? error.message : 'Failed.')
       } finally {
         button.disabled = false
+        if (other) {
+          other.disabled = false
+        }
       }
     })()
   })

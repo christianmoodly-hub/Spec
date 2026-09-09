@@ -5,6 +5,7 @@
  */
 
 import type { ProfileStructuredFields } from '../types'
+import type { UnmatchedFormField } from './messages'
 import { asStructuredFields } from './profileFields'
 
 export interface ExtractedJob {
@@ -53,6 +54,7 @@ Return ONLY valid JSON with exactly this shape:
   "yearsExperience": string,
   "salaryExpectation": string,
   "noticePeriod": string,
+  "dateOfBirth": string,
   "eeoAnswers": { [question: string]: string },
   "customFields": { [label: string]: string }
 }
@@ -61,6 +63,7 @@ Rules:
 - Use ONLY facts present in the notes. Do not invent contact details, employers, dates, or answers.
 - If a field is unknown, use an empty string. For eeoAnswers and customFields, omit keys you cannot fill.
 - yearsExperience, salaryExpectation, noticePeriod, and workAuthorization stay strings (keep the person's wording).
+- dateOfBirth: keep the person's wording, or YYYY-MM-DD if they wrote an ISO date.
 - Put recurring EEO / demographic answers in eeoAnswers, keyed by the question text.
 - Put any other repeated one-off application answers in customFields, keyed by a short label.
 - No markdown, no commentary, no extra top-level keys.`
@@ -69,6 +72,17 @@ const SELECT_OPTION_PROMPT = `You pick one option from a job-application dropdow
 Return ONLY the exact option text from the list, copied character-for-character.
 If nothing fits, or you would have to guess, return NONE.
 Do not invent facts. Do not explain.`
+
+const FILL_UNMATCHED_PROMPT = `You fill leftover job-application form fields from this person's profile only.
+Return ONLY valid JSON: { "answers": { "<id>": "<value>" } }
+Rules:
+- Use ONLY facts in the profile. Never invent names, dates, employers, or answers.
+- If you are not sure, omit the key or set the value to NONE.
+- For type "date", return YYYY-MM-DD.
+- For type "datetime-local", return YYYY-MM-DDTHH:mm (use T00:00 if the time is unknown).
+- For type "month", return YYYY-MM.
+- If options are listed, return one option's exact text, character-for-character.
+- Do not fill file, password, or hidden fields.`
 
 const CV_PROMPT = `You tailor a CV to one job for both ATS parsers and a human recruiter.
 Rules:
@@ -287,4 +301,49 @@ export async function pickSelectOption(input: {
     return null
   }
   return picked
+}
+
+export async function fillUnmatchedFields(input: {
+  fields: UnmatchedFormField[]
+  profileContext: string
+}): Promise<Record<string, string>> {
+  const fields = input.fields.slice(0, 25)
+  if (fields.length === 0) {
+    return {}
+  }
+  const listed = fields
+    .map((field) => {
+      const options =
+        field.options && field.options.length > 0
+          ? `\n  options: ${JSON.stringify(field.options.slice(0, 80))}`
+          : ''
+      return `- id: ${field.id}\n  label: ${field.label}\n  type: ${field.type}${options}`
+    })
+    .join('\n')
+  const raw = await generateContent({
+    system: FILL_UNMATCHED_PROMPT,
+    user: [
+      `Person's profile:\n${input.profileContext.trim() || '(empty)'}`,
+      `Fields:\n${listed}`,
+    ].join('\n\n'),
+    temperature: 0.1,
+    json: true,
+  })
+  const parsed = parseModelJson(raw)
+  if (!parsed || typeof parsed !== 'object') {
+    return {}
+  }
+  const answers = (parsed as { answers?: unknown }).answers
+  if (!answers || typeof answers !== 'object') {
+    return {}
+  }
+  const out: Record<string, string> = {}
+  for (const [id, value] of Object.entries(answers as Record<string, unknown>)) {
+    const text = String(value ?? '').trim()
+    if (!text || /^none$/i.test(text)) {
+      continue
+    }
+    out[id] = text
+  }
+  return out
 }

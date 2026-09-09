@@ -1,6 +1,13 @@
 import type { ProfileStructuredFields } from '../types'
 import type { CaptureDraft } from './capture'
 
+export type UnmatchedFormField = {
+  id: string
+  label: string
+  type: string
+  options?: string[]
+}
+
 export const MSG_SAVE_DRAFT = 'SPES_SAVE_DRAFT'
 export const MSG_EXTRACT_GENERIC = 'SPES_EXTRACT_GENERIC'
 export const MSG_INJECT_FALLBACK = 'SPES_INJECT_FALLBACK'
@@ -10,6 +17,7 @@ export const MSG_GENERATE_DOC = 'SPES_GENERATE_DOC'
 export const MSG_PARSE_PROFILE = 'SPES_PARSE_PROFILE'
 export const MSG_GET_PROFILE_FIELDS = 'SPES_GET_PROFILE_FIELDS'
 export const MSG_MATCH_SELECT = 'SPES_MATCH_SELECT'
+export const MSG_FILL_UNMATCHED = 'SPES_FILL_UNMATCHED'
 
 export type GenerateKind = 'cv' | 'cover-letter'
 
@@ -64,6 +72,12 @@ export type MatchSelectMessage = {
   heuristicValue?: string
 }
 
+export type FillUnmatchedMessage = {
+  type: typeof MSG_FILL_UNMATCHED
+  fields: UnmatchedFormField[]
+  profileContext: string
+}
+
 export type SpesRequest =
   | SaveDraftMessage
   | ExtractGenericMessage
@@ -74,6 +88,7 @@ export type SpesRequest =
   | ParseProfileMessage
   | GetProfileFieldsMessage
   | MatchSelectMessage
+  | FillUnmatchedMessage
 
 export type SpesResponse =
   | {
@@ -83,5 +98,6 @@ export type SpesResponse =
       structuredFields?: ProfileStructuredFields
       rawDump?: string
       optionText?: string
+      answers?: Record<string, string>
     }
   | { ok: false; error: string }

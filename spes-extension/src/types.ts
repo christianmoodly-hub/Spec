@@ -60,6 +60,7 @@ export interface ProfileStructuredFields {
   yearsExperience: string
   salaryExpectation: string
   noticePeriod: string
+  dateOfBirth: string
   eeoAnswers: Record<string, string>
   customFields: Record<string, string>
 }

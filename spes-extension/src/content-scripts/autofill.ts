@@ -1,3 +1,14 @@
+import {
+  birthDatePart,
+  datePartNeedles,
+  formatDateForField,
+  parseFlexibleDate,
+} from '../lib/autofill/date'
+import {
+  formatSpesDebugLog,
+  logSpesDebug,
+  logSpesError,
+} from '../lib/autofill/debugLog'
 import { matchField, type ScannedField } from '../lib/autofill/matcher'
 import {
   compactProfileContext,
@@ -14,8 +25,9 @@ import {
   type FillSource,
 } from '../lib/autofill/session'
 import {
+  MSG_FILL_UNMATCHED,
   MSG_GET_PROFILE_FIELDS,
-  MSG_MATCH_SELECT,
+  type UnmatchedFormField,
   type SpesRequest,
   type SpesResponse,
 } from '../lib/messages'
@@ -26,8 +38,10 @@ import { dismissFillReview, showFillReview } from './fillReview'
 import { mountSavePanel } from './savePanel'
 
 const HOST_ID = 'spes-autofill-root'
-const TEXT_TYPES = new Set(['text', 'email', 'tel', 'number', 'url'])
+const TEXT_TYPES = new Set(['text', 'email', 'tel', 'number', 'url', 'search'])
+const DATE_TYPES = new Set(['date', 'datetime-local', 'month'])
 const FILE_HINT = 'Attach your CV/resume manually here'
+const AI_FIELD_CAP = 25
 
 function send(message: SpesRequest): Promise<SpesResponse> {
   return new Promise((resolve, reject) => {
@@ -219,12 +233,17 @@ function readOptions(select: HTMLSelectElement): SelectOption[] {
   }))
 }
 
-function coerceValue(type: string, value: string): string {
+function coerceValue(
+  type: string,
+  value: string,
+  hint: string,
+): string {
+  const formatted = formatDateForField(value, type, hint)
   if (type !== 'number') {
-    return value
+    return formatted
   }
-  const match = value.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
-  return match ? match[0] : value
+  const match = formatted.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
+  return match ? match[0] : formatted
 }
 
 function setInputValue(
@@ -320,6 +339,32 @@ function isEmptyControl(
   return !el.value.trim()
 }
 
+function isLockedInput(el: HTMLInputElement | HTMLTextAreaElement): boolean {
+  if (el.disabled) {
+    return true
+  }
+  if (el instanceof HTMLInputElement && DATE_TYPES.has(el.type)) {
+    return false
+  }
+  return el.readOnly
+}
+
+function isFillableControl(el: HTMLElement): boolean {
+  if (el instanceof HTMLInputElement) {
+    if (el.type === 'file') {
+      return true
+    }
+    if (TEXT_TYPES.has(el.type) || DATE_TYPES.has(el.type)) {
+      return !isLockedInput(el)
+    }
+    return false
+  }
+  if (el instanceof HTMLTextAreaElement) {
+    return !isLockedInput(el)
+  }
+  return el instanceof HTMLSelectElement && !el.multiple && !el.disabled
+}
+
 function countUnfilled(
   controls: HTMLElement[],
   records: FillRecord[],
@@ -327,61 +372,164 @@ function countUnfilled(
   const filled = new Set<HTMLElement>(records.map((record) => record.element))
   let count = 0
   for (const el of controls) {
-    if (filled.has(el)) {
+    if (filled.has(el) || !isFillableControl(el)) {
       continue
     }
     if (el instanceof HTMLInputElement && el.type === 'file') {
       count += 1
       continue
     }
-    if (el instanceof HTMLInputElement && TEXT_TYPES.has(el.type)) {
-      if (!el.disabled && !el.readOnly && isEmptyControl(el)) {
-        count += 1
-      }
-      continue
-    }
-    if (el instanceof HTMLTextAreaElement) {
-      if (!el.disabled && !el.readOnly && isEmptyControl(el)) {
-        count += 1
-      }
-      continue
-    }
-    if (el instanceof HTMLSelectElement && !el.multiple && !el.disabled) {
-      if (isEmptyControl(el)) {
-        count += 1
-      }
+    if (
+      (el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        el instanceof HTMLSelectElement) &&
+      isEmptyControl(el)
+    ) {
+      count += 1
     }
   }
   return count
 }
 
-async function pickSelectWithAi(
-  label: string,
+function describeUnfilled(
+  controls: HTMLElement[],
+  records: FillRecord[],
+): Array<{ label: string; type: string; name: string; id: string }> {
+  const filled = new Set<HTMLElement>(records.map((record) => record.element))
+  const out: Array<{ label: string; type: string; name: string; id: string }> =
+    []
+  for (const el of controls) {
+    if (filled.has(el) || !isFillableControl(el)) {
+      continue
+    }
+    if (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    ) {
+      if (el instanceof HTMLInputElement && el.type === 'file') {
+        const scanned = toScanned(el)
+        out.push({
+          label: scanned.label,
+          type: scanned.type,
+          name: scanned.name,
+          id: scanned.id,
+        })
+        continue
+      }
+      if (isEmptyControl(el)) {
+        const scanned = toScanned(el)
+        out.push({
+          label: scanned.label,
+          type: scanned.type,
+          name: scanned.name,
+          id: scanned.id,
+        })
+      }
+    }
+  }
+  return out
+}
+
+function pickBirthSelect(
+  scanned: ScannedField,
   options: SelectOption[],
-  profileContext: string,
-  heuristicValue?: string,
-): Promise<SelectOption | null> {
-  const listed = options
-    .filter((option) => !isPlaceholderOption(option))
-    .map((option) => option.text.trim() || option.value)
-  if (listed.length === 0) {
+  dateOfBirth: string,
+): SelectOption | null {
+  const part = birthDatePart(
+    `${scanned.label} ${scanned.placeholder} ${scanned.name} ${scanned.id}`,
+  )
+  const parts = parseFlexibleDate(dateOfBirth)
+  if (!part || !parts) {
     return null
   }
-  try {
-    const response = await send({
-      type: MSG_MATCH_SELECT,
-      label,
-      options: listed,
-      profileContext,
-      heuristicValue,
-    })
-    const text = response.ok ? response.optionText?.trim() : ''
-    if (!text || /^none$/i.test(text)) {
-      return null
+  for (const needle of datePartNeedles(parts, part)) {
+    const hit = matchSelectOption(needle, options)
+    if (hit) {
+      return hit
     }
-    return matchSelectOption(text, options)
+  }
+  return null
+}
+
+async function fillLeftoversWithAi(
+  pending: Array<{
+    id: string
+    el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    scanned: ScannedField
+    options?: SelectOption[]
+  }>,
+  profileContext: string,
+  records: FillRecord[],
+): Promise<void> {
+  if (pending.length === 0) {
+    return
+  }
+  const fields: UnmatchedFormField[] = pending.map((item) => ({
+    id: item.id,
+    label: item.scanned.label || item.scanned.placeholder || item.scanned.name,
+    type: item.scanned.type,
+    options: item.options
+      ?.filter((option) => !isPlaceholderOption(option))
+      .map((option) => option.text.trim() || option.value)
+      .filter(Boolean)
+      .slice(0, 80),
+  }))
+  const response = await send({
+    type: MSG_FILL_UNMATCHED,
+    fields,
+    profileContext,
+  })
+  if (!response.ok) {
+    throw new Error(response.error)
+  }
+  const answers = response.answers ?? {}
+  for (const item of pending) {
+    const raw = answers[item.id]?.trim()
+    if (!raw) {
+      continue
+    }
+    if (item.el instanceof HTMLSelectElement) {
+      const picked = matchSelectOption(raw, item.options ?? [])
+      if (!picked) {
+        continue
+      }
+      const previous = item.el.value
+      setSelectValue(item.el, picked)
+      recordFill(
+        records,
+        item.el,
+        item.scanned.label,
+        picked.text.trim() || picked.value,
+        previous,
+        'ai',
+      )
+      continue
+    }
+    const value = coerceValue(
+      item.scanned.type,
+      raw,
+      `${item.scanned.label} ${item.scanned.placeholder}`,
+    )
+    const previous = item.el.value
+    setInputValue(item.el, value)
+    recordFill(records, item.el, item.scanned.label, value, previous, 'ai')
+  }
+}
+
+async function copyDebugLog(): Promise<void> {
+  const text = await formatSpesDebugLog()
+  try {
+    await navigator.clipboard.writeText(text)
   } catch {
-    return null
+    const area = document.createElement('textarea')
+    area.value = text
+    area.style.position = 'fixed'
+    area.style.left = '-9999px'
+    document.body.append(area)
+    area.select()
+    document.execCommand('copy')
+    area.remove()
   }
 }
 
@@ -401,39 +549,45 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
   const context = compactProfileContext(fields, rawDump)
   const records: FillRecord[] = []
   const controls = collectControls(document).filter(isDisplayed)
+  const leftovers: Array<{
+    id: string
+    el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    scanned: ScannedField
+    options?: SelectOption[]
+  }> = []
+  let leftoverIndex = 0
 
   for (const el of controls) {
     if (el instanceof HTMLInputElement && el.type === 'file') {
       markFileInput(el)
       continue
     }
-    if (el instanceof HTMLInputElement && TEXT_TYPES.has(el.type)) {
-      if (el.disabled || el.readOnly) {
+    const isText =
+      el instanceof HTMLInputElement &&
+      (TEXT_TYPES.has(el.type) || DATE_TYPES.has(el.type))
+    if (isText || el instanceof HTMLTextAreaElement) {
+      if (isLockedInput(el)) {
         continue
       }
       const scanned = toScanned(el)
       const match = matchField(scanned, fields)
       if (match.status !== 'matched') {
+        leftovers.push({
+          id: `f${leftoverIndex}`,
+          el,
+          scanned,
+        })
+        leftoverIndex += 1
         continue
       }
-      const value = coerceValue(el.type, match.value)
+      const value = coerceValue(
+        scanned.type,
+        match.value,
+        `${scanned.label} ${scanned.placeholder}`,
+      )
       const previous = el.value
       setInputValue(el, value)
       recordFill(records, el, scanned.label, value, previous, 'heuristic')
-      continue
-    }
-    if (el instanceof HTMLTextAreaElement) {
-      if (el.disabled || el.readOnly) {
-        continue
-      }
-      const scanned = toScanned(el)
-      const match = matchField(scanned, fields)
-      if (match.status !== 'matched') {
-        continue
-      }
-      const previous = el.value
-      setInputValue(el, match.value)
-      recordFill(records, el, scanned.label, match.value, previous, 'heuristic')
       continue
     }
     if (!(el instanceof HTMLSelectElement) || el.multiple || el.disabled) {
@@ -446,18 +600,17 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
       match.status === 'matched'
         ? matchSelectOption(match.value, options)
         : null
-    let source: FillSource = 'heuristic'
     if (!picked) {
-      setStatus(`Matching dropdown: ${scanned.label || 'question'}…`)
-      picked = await pickSelectWithAi(
-        scanned.label || scanned.placeholder || scanned.name,
-        options,
-        context,
-        match.status === 'matched' ? match.value : undefined,
-      )
-      source = 'ai'
+      picked = pickBirthSelect(scanned, options, fields.dateOfBirth)
     }
     if (!picked) {
+      leftovers.push({
+        id: `f${leftoverIndex}`,
+        el,
+        scanned,
+        options,
+      })
+      leftoverIndex += 1
       continue
     }
     const previous = el.value
@@ -468,22 +621,54 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
       scanned.label,
       picked.text.trim() || picked.value,
       previous,
-      source,
+      'heuristic',
     )
+  }
+
+  const aiBatch = leftovers
+    .filter((item) => isEmptyControl(item.el))
+    .slice(0, AI_FIELD_CAP)
+  if (aiBatch.length > 0) {
+    setStatus(`Matching ${aiBatch.length} leftover field${aiBatch.length === 1 ? '' : 's'}…`)
+    try {
+      await fillLeftoversWithAi(aiBatch, context, records)
+    } catch (error) {
+      await logSpesError('autofill-ai', error)
+    }
   }
 
   setFillSession(records)
   const unfilledCount = countUnfilled(controls, records)
+  const unmatched = describeUnfilled(controls, records)
+  await logSpesDebug(
+    'autofill',
+    `Filled ${records.length} on ${location.href}`,
+    JSON.stringify(
+      {
+        filled: records.map((record) => ({
+          label: record.label,
+          source: record.source,
+          value: record.value,
+        })),
+        unmatched,
+      },
+      null,
+      2,
+    ),
+  )
   showFillReview({ records, unfilledCount })
   const extra =
-    unfilledCount > 0
-      ? ` ${unfilledCount} left unfilled.`
-      : ''
+    unfilledCount > 0 ? ` ${unfilledCount} left unfilled.` : ''
   setStatus(
     records.length === 0
       ? `No confident matches.${extra}`
       : `Filled ${records.length} field${records.length === 1 ? '' : 's'}.${extra}`,
   )
+}
+
+async function copyLog(setStatus: (text: string) => void): Promise<void> {
+  await copyDebugLog()
+  setStatus('Debug log copied. Paste it in chat.')
 }
 
 function shouldMount(): boolean {
@@ -498,9 +683,11 @@ if (shouldMount()) {
     hostId: HOST_ID,
     title: 'Spes',
     actionLabel: 'Auto-fill with Spes',
+    secondaryLabel: 'Copy debug log',
     hint: 'Fills matching fields from your profile. Review before you submit.',
     side: 'left',
     onAction: autofill,
+    onSecondary: copyLog,
   })
 }
 
