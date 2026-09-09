@@ -5,6 +5,9 @@ export type {
   ApplicationStatus,
   NewApplication,
   Profile,
+  ProfileAddress,
+  ProfilePatch,
+  ProfileStructuredFields,
   Streak,
 } from '../types'
 

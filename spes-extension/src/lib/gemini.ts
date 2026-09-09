@@ -4,6 +4,9 @@
  * at build time and must not be injected into LinkedIn/Indeed pages).
  */
 
+import type { ProfileStructuredFields } from '../types'
+import { asStructuredFields } from './profileFields'
+
 export interface ExtractedJob {
   title: string
   company: string
@@ -30,6 +33,37 @@ Return ONLY valid JSON with exactly these keys:
 - dueDate: string or null (ISO date YYYY-MM-DD if a deadline or closing date is clearly stated, otherwise null)
 
 No markdown, no commentary, no extra keys. If a field is unknown, use an empty string (or null for dueDate).`
+
+const PROFILE_PARSE_PROMPT = `You extract a person's application-profile fields from freeform notes they wrote about themselves.
+Return ONLY valid JSON with exactly this shape:
+{
+  "fullName": string,
+  "email": string,
+  "phone": string,
+  "address": {
+    "street": string,
+    "city": string,
+    "stateProvince": string,
+    "postalCode": string,
+    "country": string
+  },
+  "linkedinUrl": string,
+  "portfolioUrl": string,
+  "workAuthorization": string,
+  "yearsExperience": string,
+  "salaryExpectation": string,
+  "noticePeriod": string,
+  "eeoAnswers": { [question: string]: string },
+  "customFields": { [label: string]: string }
+}
+
+Rules:
+- Use ONLY facts present in the notes. Do not invent contact details, employers, dates, or answers.
+- If a field is unknown, use an empty string. For eeoAnswers and customFields, omit keys you cannot fill.
+- yearsExperience, salaryExpectation, noticePeriod, and workAuthorization stay strings (keep the person's wording).
+- Put recurring EEO / demographic answers in eeoAnswers, keyed by the question text.
+- Put any other repeated one-off application answers in customFields, keyed by a short label.
+- No markdown, no commentary, no extra top-level keys.`
 
 const CV_PROMPT = `You tailor a CV to one job for both ATS parsers and a human recruiter.
 Rules:
@@ -93,10 +127,15 @@ async function generateContent(options: {
     throw new Error(TRY_AGAIN)
   }
 
-  const body = (await response.json()) as {
+  let body: {
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> }
     }>
+  }
+  try {
+    body = (await response.json()) as typeof body
+  } catch {
+    throw new Error(TRY_AGAIN)
   }
   const raw = body.candidates?.[0]?.content?.parts?.[0]?.text
   if (!raw?.trim()) {
@@ -195,4 +234,20 @@ export async function generateApplicationDoc(
     temperature: 0.5,
   })
   return stripFences(raw)
+}
+
+export async function parseProfileDump(
+  rawDump: string,
+): Promise<ProfileStructuredFields> {
+  const text = rawDump.trim().slice(0, 24_000)
+  if (!text) {
+    throw new Error('Paste some notes about yourself first.')
+  }
+  const raw = await generateContent({
+    system: PROFILE_PARSE_PROMPT,
+    user: `Notes:\n${text}`,
+    temperature: 0.2,
+    json: true,
+  })
+  return asStructuredFields(parseModelJson(raw))
 }

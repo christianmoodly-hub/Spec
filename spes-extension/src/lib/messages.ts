@@ -1,3 +1,4 @@
+import type { ProfileStructuredFields } from '../types'
 import type { CaptureDraft } from './capture'
 
 export const MSG_SAVE_DRAFT = 'SPES_SAVE_DRAFT'
@@ -6,6 +7,7 @@ export const MSG_INJECT_FALLBACK = 'SPES_INJECT_FALLBACK'
 export const MSG_PARSE_PAGE = 'SPES_PARSE_PAGE'
 export const MSG_REMINDERS_REFRESH = 'SPES_REMINDERS_REFRESH'
 export const MSG_GENERATE_DOC = 'SPES_GENERATE_DOC'
+export const MSG_PARSE_PROFILE = 'SPES_PARSE_PROFILE'
 
 export type GenerateKind = 'cv' | 'cover-letter'
 
@@ -43,6 +45,11 @@ export type GenerateDocMessage = {
   reusableBullets: string[]
 }
 
+export type ParseProfileMessage = {
+  type: typeof MSG_PARSE_PROFILE
+  rawDump: string
+}
+
 export type SpesRequest =
   | SaveDraftMessage
   | ExtractGenericMessage
@@ -50,7 +57,13 @@ export type SpesRequest =
   | ParsePageMessage
   | RemindersRefreshMessage
   | GenerateDocMessage
+  | ParseProfileMessage
 
 export type SpesResponse =
-  | { ok: true; draft?: CaptureDraft; text?: string }
+  | {
+      ok: true
+      draft?: CaptureDraft
+      text?: string
+      structuredFields?: ProfileStructuredFields
+    }
   | { ok: false; error: string }

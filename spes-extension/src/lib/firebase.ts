@@ -48,8 +48,10 @@ import type {
   ApplicationPatch,
   NewApplication,
   Profile,
+  ProfilePatch,
   Streak,
 } from '../types'
+import { asStructuredFields } from './profileFields'
 import {
   applyNewApplication,
   asDateKey,
@@ -150,6 +152,22 @@ function asStreak(data: Record<string, unknown>): Streak {
     currentStreak: Number(data.currentStreak ?? 0),
     lastActivityDate: asDateKey(last),
     applicationsThisWeek: Number(data.applicationsThisWeek ?? 0),
+  }
+}
+
+function asProfile(data: Record<string, unknown>): Profile {
+  return {
+    baseCV: String(data.baseCV ?? ''),
+    reusableBullets: Array.isArray(data.reusableBullets)
+      ? data.reusableBullets.map((item) => String(item))
+      : [],
+    displayName: String(data.displayName ?? ''),
+    rawDump: String(data.rawDump ?? ''),
+    structuredFields: asStructuredFields(data.structuredFields),
+    lastParsedFromDump:
+      typeof data.lastParsedFromDump === 'string' && data.lastParsedFromDump
+        ? data.lastParsedFromDump
+        : null,
   }
 }
 
@@ -475,19 +493,12 @@ export async function getProfile(uid: string): Promise<Profile | null> {
   if (!snapshot.exists()) {
     return null
   }
-  const data = snapshot.data()
-  return {
-    baseCV: String(data.baseCV ?? ''),
-    reusableBullets: Array.isArray(data.reusableBullets)
-      ? data.reusableBullets.map((item) => String(item))
-      : [],
-    displayName: String(data.displayName ?? ''),
-  }
+  return asProfile(snapshot.data() as Record<string, unknown>)
 }
 
 export async function updateProfile(
   uid: string,
-  patch: Partial<Profile>,
+  patch: ProfilePatch,
 ): Promise<void> {
   await ready()
   assertOwnUid(uid)

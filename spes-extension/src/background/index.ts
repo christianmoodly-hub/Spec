@@ -1,15 +1,17 @@
 import fallbackScript from '../content-scripts/generic-fallback?script'
 import { emptyDraft, saveCaptureDraft, type CaptureDraft } from '../lib/capture'
-import { extractJobFromText, generateApplicationDoc } from '../lib/gemini'
+import { extractJobFromText, generateApplicationDoc, parseProfileDump } from '../lib/gemini'
 import {
   MSG_EXTRACT_GENERIC,
   MSG_GENERATE_DOC,
   MSG_INJECT_FALLBACK,
+  MSG_PARSE_PROFILE,
   MSG_REMINDERS_REFRESH,
   MSG_SAVE_DRAFT,
   type ExtractGenericMessage,
   type GenerateDocMessage,
   type InjectFallbackMessage,
+  type ParseProfileMessage,
   type SaveDraftMessage,
   type SpesRequest,
   type SpesResponse,
@@ -120,6 +122,14 @@ chrome.runtime.onMessage.addListener(
             reusableBullets: payload.reusableBullets,
           })
           sendResponse({ ok: true, text })
+          return
+        }
+
+        if (message.type === MSG_PARSE_PROFILE) {
+          const { rawDump } = message as ParseProfileMessage
+          const structuredFields = await parseProfileDump(rawDump)
+          sendResponse({ ok: true, structuredFields })
+          return
         }
       } catch (error) {
         sendResponse({
