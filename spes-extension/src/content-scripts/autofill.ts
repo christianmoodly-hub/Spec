@@ -133,42 +133,132 @@ function textBefore(parent: HTMLElement, child: Node): string {
     }
   }
   const text = normalizeText(parts.join(' '))
-  return text.length <= 120 ? text : ''
+  return text.length <= 280 ? text : ''
+}
+
+function visibleFieldControls(root: HTMLElement): Element[] {
+  return [...root.querySelectorAll('input, textarea, select')].filter((node) => {
+    if (!(node instanceof HTMLElement) || isSpesTree(node)) {
+      return false
+    }
+    if (
+      node instanceof HTMLInputElement &&
+      (node.type === 'hidden' ||
+        node.type === 'submit' ||
+        node.type === 'button' ||
+        node.type === 'reset' ||
+        node.type === 'image')
+    ) {
+      return false
+    }
+    return true
+  })
+}
+
+function looksLikeLabel(text: string): boolean {
+  if (!text || text.length > 280) {
+    return false
+  }
+  const words = text.split(/\s+/).filter(Boolean)
+  return words.length > 0 && words.length <= 40
+}
+
+function firstChildLabel(root: HTMLElement, skip: HTMLElement): string {
+  if (visibleFieldControls(root).filter((node) => node !== skip).length > 0) {
+    return ''
+  }
+  const direct = [...root.children].find(
+    (node) => node instanceof HTMLLabelElement,
+  )
+  if (direct instanceof HTMLElement) {
+    const text = textWithoutControls(direct, skip)
+    if (looksLikeLabel(text)) {
+      return text
+    }
+  }
+  const labeled = root.querySelector(
+    ':scope > label, :scope > .control-label, :scope > .form-label, :scope > legend, :scope > dt',
+  )
+  if (labeled instanceof HTMLElement && !labeled.contains(skip)) {
+    const text = textWithoutControls(labeled, skip)
+    if (looksLikeLabel(text)) {
+      return text
+    }
+  }
+  return ''
 }
 
 function nearbyLabel(el: HTMLElement): string {
   const cell = el.closest('td, th')
   if (cell instanceof HTMLElement) {
-    const header = cell.parentElement?.querySelector('th')
+    const row = cell.parentElement
+    const header = row?.querySelector('th')
     if (header instanceof HTMLElement && header !== cell) {
       const text = normalizeText(header.textContent ?? '')
-      if (text) {
+      if (looksLikeLabel(text)) {
+        return text
+      }
+    }
+    const prevCell = cell.previousElementSibling
+    if (prevCell instanceof HTMLElement && !prevCell.querySelector('input, select, textarea')) {
+      const text = normalizeText(prevCell.textContent ?? '')
+      if (looksLikeLabel(text)) {
         return text
       }
     }
   }
+
   let sibling = el.previousElementSibling
   let hops = 0
-  while (sibling && hops < 3) {
-    if (!isControl(sibling)) {
+  while (sibling && hops < 4) {
+    if (sibling instanceof HTMLElement && !isControl(sibling)) {
+      const nested = firstChildLabel(sibling, el)
+      if (nested) {
+        return nested
+      }
       const text = normalizeText(sibling.textContent ?? '')
-      if (text && text.length <= 120) {
+      if (looksLikeLabel(text) && !sibling.querySelector('input, select, textarea')) {
         return text
       }
     }
     sibling = sibling.previousElementSibling
     hops += 1
   }
-  const parent = el.parentElement
-  if (parent && parent !== document.body) {
-    const before = textBefore(parent, el)
-    if (before) {
+
+  let node: HTMLElement | null = el.parentElement
+  let depth = 0
+  while (node && depth < 6 && node !== document.body) {
+    const grouped = firstChildLabel(node, el)
+    if (grouped) {
+      return grouped
+    }
+    const before = textBefore(node, el)
+    if (looksLikeLabel(before)) {
       return before
     }
+    const prev = node.previousElementSibling
+    if (prev instanceof HTMLElement && !isControl(prev)) {
+      const prevLabel = firstChildLabel(prev, el)
+      if (prevLabel) {
+        return prevLabel
+      }
+      if (!prev.querySelector('input, select, textarea')) {
+        const text = normalizeText(prev.textContent ?? '')
+        if (looksLikeLabel(text)) {
+          return text
+        }
+      }
+    }
+    node = node.parentElement
+    depth += 1
   }
+
   const legend = el.closest('fieldset')?.querySelector(':scope > legend')
   if (legend) {
-    return normalizeText(legend.textContent ?? '')
+    const text = normalizeText(legend.textContent ?? '')
+    if (looksLikeLabel(text)) {
+      return text
+    }
   }
   return ''
 }
@@ -187,6 +277,10 @@ function associatedLabel(el: HTMLElement): string {
     if (normalizeText(text)) {
       return normalizeText(text)
     }
+  }
+  const titled = el.getAttribute('title')
+  if (titled?.trim() && looksLikeLabel(normalizeText(titled))) {
+    return normalizeText(titled)
   }
   if (el.id) {
     const byFor = document.querySelector(labelForSelector(el.id))
@@ -281,6 +375,106 @@ function setSelectValue(el: HTMLSelectElement, option: SelectOption): void {
   }
   el.dispatchEvent(new Event('input', { bubbles: true }))
   el.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function setRadioChecked(radio: HTMLInputElement): void {
+  const desc = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'checked',
+  )
+  radio.focus()
+  if (desc?.set) {
+    desc.set.call(radio, true)
+  } else {
+    radio.checked = true
+  }
+  radio.dispatchEvent(new Event('input', { bubbles: true }))
+  radio.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function radioOptionText(radio: HTMLInputElement): string {
+  const wrap = radio.closest('label')
+  if (wrap instanceof HTMLElement) {
+    const text = textWithoutControls(wrap, radio)
+    if (text) {
+      return text
+    }
+  }
+  return associatedLabel(radio) || radio.value
+}
+
+function radioGroups(controls: HTMLElement[]): HTMLInputElement[][] {
+  const map = new Map<string, HTMLInputElement[]>()
+  for (const el of controls) {
+    if (
+      !(el instanceof HTMLInputElement) ||
+      el.type !== 'radio' ||
+      el.disabled
+    ) {
+      continue
+    }
+    const key = el.name.trim()
+    if (!key) {
+      continue
+    }
+    const list = map.get(key) ?? []
+    list.push(el)
+    map.set(key, list)
+  }
+  return [...map.values()]
+}
+
+function radioGroupQuestion(radios: HTMLInputElement[]): string {
+  const first = radios[0]
+  const legend = first
+    .closest('fieldset')
+    ?.querySelector(':scope > legend')
+  if (legend) {
+    const text = normalizeText(legend.textContent ?? '')
+    if (looksLikeLabel(text)) {
+      return text
+    }
+  }
+  let shared: HTMLElement | null = first.parentElement
+  while (shared && shared !== document.body) {
+    const extras = visibleFieldControls(shared).filter(
+      (node) =>
+        !(node instanceof HTMLInputElement && radios.includes(node)),
+    )
+    if (extras.length === 0 && radios.every((radio) => shared?.contains(radio))) {
+      const grouped = firstChildLabel(shared, first)
+      if (grouped) {
+        return grouped
+      }
+      const prev = shared.previousElementSibling
+      if (
+        prev instanceof HTMLElement &&
+        !prev.querySelector('input, select, textarea')
+      ) {
+        const text = normalizeText(prev.textContent ?? '')
+        if (looksLikeLabel(text)) {
+          return text
+        }
+      }
+      const before = textBefore(shared, first)
+      if (looksLikeLabel(before)) {
+        return before
+      }
+    }
+    shared = shared.parentElement
+  }
+  return nearbyLabel(first)
+}
+
+function radioGroupEmpty(radios: HTMLInputElement[]): boolean {
+  const checked = radios.find((radio) => radio.checked)
+  if (!checked) {
+    return true
+  }
+  return isPlaceholderOption({
+    value: checked.value,
+    text: radioOptionText(checked),
+  })
 }
 
 function markFileInput(input: HTMLInputElement): void {
@@ -388,6 +582,14 @@ function countUnfilled(
       count += 1
     }
   }
+  for (const radios of radioGroups(controls)) {
+    if (radios.some((radio) => filled.has(radio))) {
+      continue
+    }
+    if (radioGroupEmpty(radios)) {
+      count += 1
+    }
+  }
   return count
 }
 
@@ -428,6 +630,20 @@ function describeUnfilled(
       }
     }
   }
+  for (const radios of radioGroups(controls)) {
+    if (radios.some((radio) => filled.has(radio))) {
+      continue
+    }
+    if (!radioGroupEmpty(radios)) {
+      continue
+    }
+    out.push({
+      label: radioGroupQuestion(radios),
+      type: 'radio',
+      name: radios[0]?.name ?? '',
+      id: radios[0]?.id ?? '',
+    })
+  }
   return out
 }
 
@@ -452,13 +668,20 @@ function pickBirthSelect(
   return null
 }
 
+type Leftover = {
+  id: string
+  el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  scanned: ScannedField
+  options?: SelectOption[]
+  radios?: HTMLInputElement[]
+}
+
+function hasQuestionText(scanned: ScannedField): boolean {
+  return Boolean(scanned.label.trim() || scanned.placeholder.trim())
+}
+
 async function fillLeftoversWithAi(
-  pending: Array<{
-    id: string
-    el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    scanned: ScannedField
-    options?: SelectOption[]
-  }>,
+  pending: Leftover[],
   profileContext: string,
   records: FillRecord[],
 ): Promise<void> {
@@ -487,6 +710,26 @@ async function fillLeftoversWithAi(
   for (const item of pending) {
     const raw = answers[item.id]?.trim()
     if (!raw) {
+      continue
+    }
+    if (item.radios && item.radios.length > 0) {
+      const picked = matchSelectOption(raw, item.options ?? [])
+      const radio = picked
+        ? item.radios.find((node) => node.value === picked.value)
+        : undefined
+      if (!picked || !radio) {
+        continue
+      }
+      const previous = item.radios.find((node) => node.checked)?.value ?? ''
+      setRadioChecked(radio)
+      recordFill(
+        records,
+        radio,
+        item.scanned.label,
+        picked.text.trim() || picked.value,
+        previous,
+        'ai',
+      )
       continue
     }
     if (item.el instanceof HTMLSelectElement) {
@@ -549,12 +792,7 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
   const context = compactProfileContext(fields, rawDump)
   const records: FillRecord[] = []
   const controls = collectControls(document).filter(isDisplayed)
-  const leftovers: Array<{
-    id: string
-    el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    scanned: ScannedField
-    options?: SelectOption[]
-  }> = []
+  const leftovers: Leftover[] = []
   let leftoverIndex = 0
 
   for (const el of controls) {
@@ -625,8 +863,59 @@ async function autofill(setStatus: (text: string) => void): Promise<void> {
     )
   }
 
+  for (const radios of radioGroups(controls)) {
+    if (!radioGroupEmpty(radios)) {
+      continue
+    }
+    const scanned: ScannedField = {
+      label: radioGroupQuestion(radios),
+      name: radios[0]?.name ?? '',
+      id: radios[0]?.id ?? '',
+      placeholder: '',
+      type: 'radio',
+    }
+    const options = radios.map((radio) => ({
+      value: radio.value,
+      text: radioOptionText(radio) || radio.value,
+    }))
+    const match = matchField(scanned, fields)
+    const picked =
+      match.status === 'matched'
+        ? matchSelectOption(match.value, options)
+        : null
+    const radio = picked
+      ? radios.find((node) => node.value === picked.value)
+      : undefined
+    if (!picked || !radio) {
+      leftovers.push({
+        id: `f${leftoverIndex}`,
+        el: radios[0],
+        scanned,
+        options,
+        radios,
+      })
+      leftoverIndex += 1
+      continue
+    }
+    const previous = radios.find((node) => node.checked)?.value ?? ''
+    setRadioChecked(radio)
+    recordFill(
+      records,
+      radio,
+      scanned.label,
+      picked.text.trim() || picked.value,
+      previous,
+      'heuristic',
+    )
+  }
+
   const aiBatch = leftovers
-    .filter((item) => isEmptyControl(item.el))
+    .filter((item) =>
+      item.radios
+        ? radioGroupEmpty(item.radios)
+        : isEmptyControl(item.el),
+    )
+    .filter((item) => hasQuestionText(item.scanned))
     .slice(0, AI_FIELD_CAP)
   if (aiBatch.length > 0) {
     setStatus(`Matching ${aiBatch.length} leftover field${aiBatch.length === 1 ? '' : 's'}…`)

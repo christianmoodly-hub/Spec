@@ -256,6 +256,31 @@ describe('matchField customFields and eeoAnswers', () => {
     })
   })
 
+  it('matches a short custom label to slash-separated alternatives', () => {
+    const withId = profile({
+      customFields: { ID: '9301015800083' },
+    })
+    expect(
+      matchField(
+        field({ label: 'ID / Passport / Visa Number' }),
+        withId,
+      ),
+    ).toMatchObject({
+      key: 'customFields',
+      value: '9301015800083',
+      recordKey: 'ID',
+    })
+  })
+
+  it('does not treat a slash list as a match for an unrelated short key', () => {
+    const withName = profile({
+      customFields: { Name: 'Ada' },
+    })
+    expect(
+      matchField(field({ label: 'First name / Last name' }), withName),
+    ).toEqual({ status: 'unmatched' })
+  })
+
   it('matches recorded EEO answers', () => {
     expect(
       matchField(field({ label: 'Are you Hispanic or Latino?' }), filled),

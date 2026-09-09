@@ -4,8 +4,9 @@ export interface SelectOption {
   disabled?: boolean
 }
 
-const PLACEHOLDER =
-  /^(select(?:\s+(?:one|an?\s+option))?|choose(?:\s+(?:one|an?\s+option))?|please\s+select|--+|n\/?a)[\s.…:-]*$/i
+const SELECT_PROMPT =
+  /^(?:[-–—.\s]*)(?:please\s+)?(?:select|choose|pick)(?:\s+\w+){0,6}(?:[-–—.\s…:]*)?$/i
+const BLANK_PROMPT = /^(?:-+|–+|—+|n\/?a)$/i
 
 export function isPlaceholderOption(option: SelectOption): boolean {
   if (option.disabled) {
@@ -16,7 +17,13 @@ export function isPlaceholderOption(option: SelectOption): boolean {
   if (!text && !value) {
     return true
   }
-  return PLACEHOLDER.test(text)
+  if (SELECT_PROMPT.test(text) || BLANK_PROMPT.test(text)) {
+    return true
+  }
+  if (!value && /select|choose|pick/i.test(text)) {
+    return true
+  }
+  return false
 }
 
 export function matchSelectOption(

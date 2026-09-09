@@ -279,13 +279,17 @@ function fieldHaystacks(field: ScannedField): string[] {
   }
   push(field.label)
   push(field.placeholder)
-  if (field.name.trim()) {
+  if (field.name.trim() && !isGenericControlName(field.name)) {
     push(identToText(field.name))
   }
-  if (field.id.trim()) {
+  if (field.id.trim() && !isGenericControlName(field.id)) {
     push(identToText(field.id))
   }
   return out
+}
+
+function isGenericControlName(value: string): boolean {
+  return /^(controls|screeningquestions|file)(\[|_)\d+/i.test(value.trim())
 }
 
 function bestRecordMatch(
@@ -321,6 +325,10 @@ export function labelSimilarity(
   }
   if (!allowNear) {
     return 0
+  }
+  const slashScore = slashAlternativeScore(left, right)
+  if (slashScore > 0) {
+    return slashScore
   }
   const ta = a.split(' ')
   const tb = b.split(' ')
@@ -470,6 +478,34 @@ export function valueForStructuredKey(
     return fields.address[sub].trim()
   }
   return fields[key as Exclude<StructuredMatchKey, `address.${string}`>].trim()
+}
+
+function slashAlternativeScore(left: string, right: string): number {
+  const leftSegs = slashSegments(left)
+  const rightSegs = slashSegments(right)
+  if (leftSegs.length === 0 && rightSegs.length === 0) {
+    return 0
+  }
+  const leftAll = [canonicalQuestion(left), ...leftSegs].filter(Boolean)
+  const rightAll = [canonicalQuestion(right), ...rightSegs].filter(Boolean)
+  const leftSet = new Set(leftSegs.length > 0 ? leftSegs : leftAll)
+  const rightSet = new Set(rightSegs.length > 0 ? rightSegs : rightAll)
+  for (const segment of leftSet) {
+    if (rightSet.has(segment)) {
+      return 0.88
+    }
+  }
+  return 0
+}
+
+function slashSegments(value: string): string[] {
+  if (!/[|/]/.test(value)) {
+    return []
+  }
+  return value
+    .split(/[|/]/)
+    .map((part) => canonicalQuestion(part))
+    .filter(Boolean)
 }
 
 function canonicalQuestion(value: string): string {

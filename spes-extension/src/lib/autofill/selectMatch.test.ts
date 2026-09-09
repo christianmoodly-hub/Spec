@@ -19,6 +19,13 @@ describe('isPlaceholderOption', () => {
       false,
     )
   })
+
+  it('treats Select Title style prompts as placeholders', () => {
+    expect(
+      isPlaceholderOption({ value: '0', text: 'Select Title' }),
+    ).toBe(true)
+    expect(isPlaceholderOption({ value: '1', text: 'Mr' })).toBe(false)
+  })
 })
 
 describe('matchSelectOption', () => {

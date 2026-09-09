@@ -138,29 +138,56 @@ async function generateContent(options: {
         },
       }),
     })
-  } catch {
-    throw new Error(TRY_AGAIN)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(message || TRY_AGAIN)
   }
 
   if (!response.ok) {
-    throw new Error(TRY_AGAIN)
+    throw new Error(await geminiHttpError(response))
   }
 
   let body: {
     candidates?: Array<{
+      finishReason?: string
       content?: { parts?: Array<{ text?: string }> }
     }>
+    error?: { message?: string }
   }
   try {
     body = (await response.json()) as typeof body
   } catch {
-    throw new Error(TRY_AGAIN)
+    throw new Error('Gemini returned a non-JSON response.')
   }
-  const raw = body.candidates?.[0]?.content?.parts?.[0]?.text
+  if (body.error?.message) {
+    throw new Error(body.error.message)
+  }
+  const candidate = body.candidates?.[0]
+  const raw = candidate?.content?.parts?.[0]?.text
   if (!raw?.trim()) {
-    throw new Error(TRY_AGAIN)
+    const reason = candidate?.finishReason ?? 'empty'
+    throw new Error(`Gemini returned no text (${reason}).`)
   }
   return raw.trim()
+}
+
+async function geminiHttpError(response: Response): Promise<string> {
+  const detail = await response.text()
+  try {
+    const parsed = JSON.parse(detail) as {
+      error?: { message?: string; status?: string }
+    }
+    const message = parsed.error?.message?.trim()
+    if (message) {
+      return `Gemini HTTP ${response.status}: ${message}`
+    }
+  } catch {
+    /* use raw text */
+  }
+  const snippet = detail.replace(/\s+/g, ' ').trim().slice(0, 300)
+  return snippet
+    ? `Gemini HTTP ${response.status}: ${snippet}`
+    : `Gemini HTTP ${response.status}`
 }
 
 function parseModelJson(raw: string): unknown {
