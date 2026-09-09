@@ -49,6 +49,12 @@
       "matches": ["https://*.indeed.com/*"],
       "js": ["src/content-scripts/indeed.ts"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["src/content-scripts/autofill.ts"],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }

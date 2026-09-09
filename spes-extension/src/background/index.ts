@@ -1,21 +1,31 @@
 import fallbackScript from '../content-scripts/generic-fallback?script'
 import { emptyDraft, saveCaptureDraft, type CaptureDraft } from '../lib/capture'
-import { extractJobFromText, generateApplicationDoc, parseProfileDump } from '../lib/gemini'
+import { auth, getOwnProfile } from '../lib/firebase'
+import {
+  extractJobFromText,
+  generateApplicationDoc,
+  parseProfileDump,
+  pickSelectOption,
+} from '../lib/gemini'
 import {
   MSG_EXTRACT_GENERIC,
   MSG_GENERATE_DOC,
+  MSG_GET_PROFILE_FIELDS,
   MSG_INJECT_FALLBACK,
+  MSG_MATCH_SELECT,
   MSG_PARSE_PROFILE,
   MSG_REMINDERS_REFRESH,
   MSG_SAVE_DRAFT,
   type ExtractGenericMessage,
   type GenerateDocMessage,
   type InjectFallbackMessage,
+  type MatchSelectMessage,
   type ParseProfileMessage,
   type SaveDraftMessage,
   type SpesRequest,
   type SpesResponse,
 } from '../lib/messages'
+import { emptyStructuredFields } from '../lib/profileFields'
 import {
   openTrackerFromNotification,
   REMINDER_ALARM,
@@ -129,6 +139,40 @@ chrome.runtime.onMessage.addListener(
           const { rawDump } = message as ParseProfileMessage
           const structuredFields = await parseProfileDump(rawDump)
           sendResponse({ ok: true, structuredFields })
+          return
+        }
+
+        if (message.type === MSG_GET_PROFILE_FIELDS) {
+          const profile = await getOwnProfile()
+          if (!auth.currentUser) {
+            sendResponse({
+              ok: false,
+              error: 'Sign in via the Spes popup first.',
+            })
+            return
+          }
+          sendResponse({
+            ok: true,
+            structuredFields:
+              profile?.structuredFields ?? emptyStructuredFields(),
+            rawDump: profile?.rawDump ?? '',
+          })
+          return
+        }
+
+        if (message.type === MSG_MATCH_SELECT) {
+          const payload = message as MatchSelectMessage
+          try {
+            const optionText = await pickSelectOption({
+              label: payload.label,
+              options: payload.options,
+              profileContext: payload.profileContext,
+              heuristicValue: payload.heuristicValue,
+            })
+            sendResponse({ ok: true, optionText: optionText ?? 'NONE' })
+          } catch {
+            sendResponse({ ok: true, optionText: 'NONE' })
+          }
           return
         }
       } catch (error) {

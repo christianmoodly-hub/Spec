@@ -3,6 +3,7 @@ export function mountSavePanel(options: {
   title: string
   actionLabel: string
   hint: string
+  side?: 'left' | 'right'
   onAction: (setStatus: (text: string) => void) => Promise<void>
 }): void {
   let host = document.getElementById(options.hostId)
@@ -13,12 +14,13 @@ export function mountSavePanel(options: {
     document.documentElement.append(host)
   }
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
+  const side = options.side === 'left' ? 'left' : 'right'
   root.innerHTML = `
     <style>
       :host { all: initial; }
       .wrap {
         position: fixed;
-        right: 16px;
+        ${side}: 16px;
         bottom: 16px;
         z-index: 2147483646;
         width: 220px;

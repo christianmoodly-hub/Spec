@@ -487,6 +487,15 @@ export async function updateStreak(
   await setDoc(streakDoc(uid), omitUndefined({ ...patch }), { merge: true })
 }
 
+export async function getOwnProfile(): Promise<Profile | null> {
+  await ready()
+  const uid = auth.currentUser?.uid
+  if (!uid) {
+    return null
+  }
+  return getProfile(uid)
+}
+
 export async function getProfile(uid: string): Promise<Profile | null> {
   await ready()
   const snapshot = await getDoc(profileDoc(uid))

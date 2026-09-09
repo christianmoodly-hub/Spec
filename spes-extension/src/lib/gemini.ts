@@ -65,6 +65,11 @@ Rules:
 - Put any other repeated one-off application answers in customFields, keyed by a short label.
 - No markdown, no commentary, no extra top-level keys.`
 
+const SELECT_OPTION_PROMPT = `You pick one option from a job-application dropdown for this person.
+Return ONLY the exact option text from the list, copied character-for-character.
+If nothing fits, or you would have to guess, return NONE.
+Do not invent facts. Do not explain.`
+
 const CV_PROMPT = `You tailor a CV to one job for both ATS parsers and a human recruiter.
 Rules:
 - Use ONLY facts from the base CV and reusable bullets. Do not invent jobs, dates, employers, tools, or achievements.
@@ -250,4 +255,36 @@ export async function parseProfileDump(
     json: true,
   })
   return asStructuredFields(parseModelJson(raw))
+}
+
+export async function pickSelectOption(input: {
+  label: string
+  options: string[]
+  profileContext: string
+  heuristicValue?: string
+}): Promise<string | null> {
+  const options = input.options.map((item) => item.trim()).filter(Boolean)
+  if (options.length === 0) {
+    return null
+  }
+  const listed = options.slice(0, 150)
+  const heuristic = input.heuristicValue?.trim()
+  const user = [
+    `Question / field label:\n${input.label.trim() || '(none)'}`,
+    heuristic ? `Heuristic suggestion (may or may not match an option):\n${heuristic}` : '',
+    `Person's profile:\n${input.profileContext.trim() || '(empty)'}`,
+    `Options:\n${listed.map((item) => `- ${item}`).join('\n')}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  const raw = await generateContent({
+    system: SELECT_OPTION_PROMPT,
+    user,
+    temperature: 0.1,
+  })
+  const picked = stripFences(raw).replace(/^["']|["']$/g, '').trim()
+  if (!picked || /^none$/i.test(picked)) {
+    return null
+  }
+  return picked
 }

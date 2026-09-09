@@ -8,6 +8,8 @@ export const MSG_PARSE_PAGE = 'SPES_PARSE_PAGE'
 export const MSG_REMINDERS_REFRESH = 'SPES_REMINDERS_REFRESH'
 export const MSG_GENERATE_DOC = 'SPES_GENERATE_DOC'
 export const MSG_PARSE_PROFILE = 'SPES_PARSE_PROFILE'
+export const MSG_GET_PROFILE_FIELDS = 'SPES_GET_PROFILE_FIELDS'
+export const MSG_MATCH_SELECT = 'SPES_MATCH_SELECT'
 
 export type GenerateKind = 'cv' | 'cover-letter'
 
@@ -50,6 +52,18 @@ export type ParseProfileMessage = {
   rawDump: string
 }
 
+export type GetProfileFieldsMessage = {
+  type: typeof MSG_GET_PROFILE_FIELDS
+}
+
+export type MatchSelectMessage = {
+  type: typeof MSG_MATCH_SELECT
+  label: string
+  options: string[]
+  profileContext: string
+  heuristicValue?: string
+}
+
 export type SpesRequest =
   | SaveDraftMessage
   | ExtractGenericMessage
@@ -58,6 +72,8 @@ export type SpesRequest =
   | RemindersRefreshMessage
   | GenerateDocMessage
   | ParseProfileMessage
+  | GetProfileFieldsMessage
+  | MatchSelectMessage
 
 export type SpesResponse =
   | {
@@ -65,5 +81,7 @@ export type SpesResponse =
       draft?: CaptureDraft
       text?: string
       structuredFields?: ProfileStructuredFields
+      rawDump?: string
+      optionText?: string
     }
   | { ok: false; error: string }
