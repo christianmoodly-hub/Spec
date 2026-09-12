@@ -1,8 +1,12 @@
 node_modules
 dist
+dist.zip
+*.zip
 .DS_Store
 *.local
 *.log
 .vite
 node_modules/.tmp
 .env
+.env.*
+!.env.example

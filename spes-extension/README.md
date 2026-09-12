@@ -48,7 +48,7 @@ Chrome and Edge unpacked IDs are different. Repeat the authorized-domain and red
 
 ## Firebase
 
-Project: `spec-6dd69`. Do not commit `.env`.
+Use your own Firebase project. Do not commit `.env`, `dist/`, or `dist.zip` — Vite inlines keys into the built bundle.
 
 ### Google sign-in
 
