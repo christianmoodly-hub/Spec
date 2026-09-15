@@ -197,7 +197,25 @@ async function geminiHttpError(response: Response): Promise<string> {
   const detail = await response.text()
   try {
     const parsed = JSON.parse(detail) as {
-      error?: { message?: string; status?: string }
+      error?: {
+        message?: string
+        status?: string
+        details?: Array<{ reason?: string }>
+      }
+    }
+    const reason = parsed.error?.details?.find((d) => d.reason)?.reason
+    if (
+      response.status === 401 &&
+      (reason === 'ACCESS_TOKEN_TYPE_UNSUPPORTED' ||
+        /invalid authentication credentials/i.test(
+          parsed.error?.message ?? '',
+        ))
+    ) {
+      return (
+        'Gemini API key rejected (401). Paste a full key from ' +
+        'https://aistudio.google.com/apikey into VITE_GEMINI_API_KEY, ' +
+        'then run npm run build and reload the extension.'
+      )
     }
     const message = parsed.error?.message?.trim()
     if (message) {
