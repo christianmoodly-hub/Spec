@@ -118,6 +118,61 @@ Rules:
 - Use empty strings for unknown fields. Omit empty skill groups, roles, and education entries.
 - No extra keys.`
 
+const CV_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  required: ['name', 'contact', 'summary', 'skills', 'experience', 'education'],
+  properties: {
+    name: { type: 'STRING' },
+    contact: {
+      type: 'OBJECT',
+      properties: {
+        location: { type: 'STRING' },
+        phone: { type: 'STRING' },
+        email: { type: 'STRING' },
+        portfolio: { type: 'STRING' },
+      },
+    },
+    summary: { type: 'STRING' },
+    skills: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          category: { type: 'STRING' },
+          items: { type: 'ARRAY', items: { type: 'STRING' } },
+        },
+      },
+    },
+    experience: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          company: { type: 'STRING' },
+          location: { type: 'STRING' },
+          start: { type: 'STRING' },
+          end: { type: 'STRING' },
+          bullets: { type: 'ARRAY', items: { type: 'STRING' } },
+        },
+      },
+    },
+    education: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          institution: { type: 'STRING' },
+          qualification: { type: 'STRING' },
+          start: { type: 'STRING' },
+          end: { type: 'STRING' },
+          details: { type: 'STRING' },
+        },
+      },
+    },
+  },
+} as const
+
 const COVER_PROMPT = `You write a short cover letter for a job application.
 Rules:
 - Use ONLY facts from the base CV and reusable bullets. Do not invent experience.
@@ -145,7 +200,9 @@ async function generateContent(options: {
   user: string
   temperature: number
   json?: boolean
+  responseSchema?: unknown
   maxOutputTokens?: number
+  thinkingLevel?: 'LOW' | 'MINIMAL'
 }): Promise<string> {
   let lastError: Error | null = null
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -168,7 +225,9 @@ async function generateContentOnce(options: {
   user: string
   temperature: number
   json?: boolean
+  responseSchema?: unknown
   maxOutputTokens?: number
+  thinkingLevel?: 'LOW' | 'MINIMAL'
 }): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName()}:generateContent?key=${encodeURIComponent(apiKey())}`
   let response: Response
@@ -183,6 +242,12 @@ async function generateContentOnce(options: {
           temperature: options.temperature,
           maxOutputTokens: options.maxOutputTokens ?? 4096,
           ...(options.json ? { responseMimeType: 'application/json' } : {}),
+          ...(options.responseSchema
+            ? { responseSchema: options.responseSchema }
+            : {}),
+          ...(options.thinkingLevel
+            ? { thinkingConfig: { thinkingLevel: options.thinkingLevel } }
+            : {}),
         },
       }),
     })
@@ -192,13 +257,17 @@ async function generateContentOnce(options: {
   }
 
   if (!response.ok) {
-    throw new Error(await geminiHttpError(response))
+    const message = await geminiHttpError(response)
+    if (options.thinkingLevel && /thinking/i.test(message)) {
+      return generateContentOnce({ ...options, thinkingLevel: undefined })
+    }
+    throw new Error(message)
   }
 
   let body: {
     candidates?: Array<{
       finishReason?: string
-      content?: { parts?: Array<{ text?: string }> }
+      content?: { parts?: Array<{ text?: string; thought?: boolean }> }
     }>
     error?: { message?: string }
   }
@@ -211,12 +280,17 @@ async function generateContentOnce(options: {
     throw new Error(body.error.message)
   }
   const candidate = body.candidates?.[0]
-  const raw = candidate?.content?.parts?.[0]?.text
-  if (!raw?.trim()) {
+  const parts = candidate?.content?.parts ?? []
+  const visible = parts.filter((part) => part.text && !part.thought)
+  const raw = (visible.length > 0 ? visible : parts)
+    .map((part) => part.text ?? '')
+    .join('')
+    .trim()
+  if (!raw) {
     const reason = candidate?.finishReason ?? 'empty'
     throw new Error(`Gemini returned no text (${reason}).`)
   }
-  return raw.trim()
+  return raw
 }
 
 async function geminiHttpError(response: Response): Promise<string> {
@@ -375,17 +449,29 @@ async function generateTailoredCv(user: string): Promise<string> {
       attempt === 0 || !lastError
         ? CV_PROMPT
         : `${CV_PROMPT}\n\nYour previous reply was rejected: ${lastError.message} Return ONLY the JSON object.`
-    const raw = await generateContent({
-      system,
-      user,
-      temperature: attempt === 0 ? 0.3 : 0.1,
-      json: true,
-      maxOutputTokens: 8192,
-    })
+    let raw = ''
     try {
+      raw = await generateContent({
+        system,
+        user,
+        temperature: attempt === 0 ? 0.3 : 0.1,
+        json: true,
+        responseSchema: CV_RESPONSE_SCHEMA,
+        thinkingLevel: 'LOW',
+        maxOutputTokens: 32768,
+      })
       return JSON.stringify(parseCvDocument(raw))
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
+      const parsed = error instanceof Error ? error : new Error(String(error))
+      if (!raw && !/tailored cv|valid json|invalid/i.test(parsed.message)) {
+        throw parsed
+      }
+      lastError =
+        raw && !raw.trim().endsWith('}')
+          ? new Error(
+              'The tailored CV was cut off before it finished. Please try again.',
+            )
+          : parsed
     }
   }
   throw lastError ?? new Error('The tailored CV was not valid JSON. Please try again.')

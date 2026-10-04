@@ -67,6 +67,17 @@ describe('parseCvDocument', () => {
     )
   })
 
+  it('accepts trailing commas and a wrapped payload', () => {
+    const cv = parseCvDocument(`Here is the CV:
+{"cv":{"name":"Alex Morgan","skills":["TypeScript","SQL",],"experience":[{"title":"Engineer","bullets":"Built the tracker\\nKept it fast",}]}}`)
+    expect(cv.name).toBe('Alex Morgan')
+    expect(cv.skills[0]?.items).toEqual(['TypeScript', 'SQL'])
+    expect(cv.experience[0]?.bullets).toEqual([
+      'Built the tracker',
+      'Kept it fast',
+    ])
+  })
+
   it('rejects malformed JSON', () => {
     expect(() => parseCvDocument('not json')).toThrow(/valid JSON/)
     expect(() => parseCvDocument('{"experience":"nope"}')).toThrow(/experience/)

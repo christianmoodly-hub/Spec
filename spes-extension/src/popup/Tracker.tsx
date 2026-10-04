@@ -80,7 +80,10 @@ function formatDraftError(message: string | undefined): string {
   if (/description/i.test(message)) {
     return 'Save a job description on this application first.'
   }
-  if (/tailored cv|valid json/i.test(message)) {
+  if (/tailored cv|valid json|cut off/i.test(message)) {
+    return message
+  }
+  if (/^Gemini HTTP/i.test(message)) {
     return message
   }
   return "That didn't work. Please try again."

@@ -82,6 +82,12 @@ function asStringList(value: unknown, label: string): string[] {
   if (value == null) {
     return []
   }
+  if (typeof value === 'string') {
+    return value
+      .split(/\n+/)
+      .map((item) => asString(item))
+      .filter(Boolean)
+  }
   if (!Array.isArray(value)) {
     fail(`The tailored CV JSON has an invalid ${label} list. Please try again.`)
   }
@@ -180,10 +186,18 @@ function stripJsonFences(raw: string): string {
     .trim()
 }
 
+function relaxJson(text: string): string {
+  return text.replace(/[\u201C\u201D]/g, '"').replace(/,\s*([}\]])/g, '$1')
+}
+
+function parseJsonText(text: string): unknown {
+  return JSON.parse(relaxJson(text)) as unknown
+}
+
 function parseJsonObject(raw: string): unknown {
   const stripped = stripJsonFences(raw)
   try {
-    return JSON.parse(stripped) as unknown
+    return parseJsonText(stripped)
   } catch {
     const start = stripped.indexOf('{')
     const end = stripped.lastIndexOf('}')
@@ -191,16 +205,45 @@ function parseJsonObject(raw: string): unknown {
       fail(JSON_ERROR)
     }
     try {
-      return JSON.parse(stripped.slice(start, end + 1)) as unknown
+      return parseJsonText(stripped.slice(start, end + 1))
     } catch {
       fail(JSON_ERROR)
     }
   }
 }
 
+function unwrapCvPayload(value: unknown): unknown {
+  if (typeof value === 'string' && value.trim().startsWith('{')) {
+    try {
+      return unwrapCvPayload(parseJsonText(value))
+    } catch {
+      return value
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value
+  }
+  const record = value as Record<string, unknown>
+  const hasCvFields =
+    'name' in record || 'experience' in record || 'summary' in record
+  if (hasCvFields) {
+    return value
+  }
+  for (const key of ['cv', 'resume', 'document', 'data', 'result']) {
+    const inner = record[key]
+    if (inner && typeof inner === 'object') {
+      return inner
+    }
+  }
+  return value
+}
+
 function asContact(value: unknown): CvContact {
   if (value == null) {
     return { location: '', phone: '', email: '', portfolio: '' }
+  }
+  if (typeof value === 'string') {
+    return { location: asString(value), phone: '', email: '', portfolio: '' }
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     fail('The tailored CV JSON has an invalid contact block. Please try again.')
@@ -215,6 +258,10 @@ function asContact(value: unknown): CvContact {
 }
 
 function asSkills(value: unknown): CvSkillGroup[] {
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    const items = value.map(asString).filter(Boolean)
+    return items.length > 0 ? [{ category: 'Skills', items }] : []
+  }
   return requireRecords(value, 'skills').flatMap((record) => {
     const items = asStringList(record.items, 'skills').map(cleanBullet)
     if (items.length === 0) {
@@ -284,7 +331,7 @@ function asEducation(value: unknown): CvEducation[] {
 }
 
 export function parseCvDocument(raw: string): CvDocument {
-  const value = parseJsonObject(raw)
+  const value = unwrapCvPayload(parseJsonObject(raw))
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     fail('The tailored CV JSON was not an object. Please try again.')
   }
