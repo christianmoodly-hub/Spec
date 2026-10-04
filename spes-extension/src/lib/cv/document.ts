@@ -78,6 +78,106 @@ function cleanBullet(value: string): string {
   return value.replace(/^(?:[•●▪◦*-]|\u2013|\u2014)\s+/, '').trim()
 }
 
+const ROLE_WORDS = [
+  'specialist',
+  'developer',
+  'engineer',
+  'manager',
+  'technician',
+  'analyst',
+  'consultant',
+  'administrator',
+  'maintainer',
+  'coordinator',
+  'assistant',
+  'officer',
+]
+
+function wordsOf(text: string): string[] {
+  return text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean)
+}
+
+function wordKey(word: string): string {
+  return word.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/** A role word with extra letters glued on, such as "Specialistbal". */
+function gluedRoleWord(word: string): string | null {
+  const letters = word.replace(/[^A-Za-z]/g, '')
+  const lower = letters.toLowerCase()
+  for (const known of ROLE_WORDS) {
+    if (lower.startsWith(known) && lower.length >= known.length + 3) {
+      return known.charAt(0).toUpperCase() + known.slice(1)
+    }
+  }
+  return null
+}
+
+function clipTitle(text: string): string {
+  const kept: string[] = []
+  const seen = new Set<string>()
+  for (const word of wordsOf(text)) {
+    if (kept.length >= 8) {
+      break
+    }
+    const glued = gluedRoleWord(word)
+    if (glued) {
+      kept.push(glued)
+      break
+    }
+    const key = wordKey(word)
+    if (key.length > 3 && seen.has(key)) {
+      break
+    }
+    if (key.length > 3) {
+      seen.add(key)
+    }
+    kept.push(word)
+  }
+  return kept.join(' ').replace(/[\s,/|-]+$/g, '').trim()
+}
+
+function clipWords(text: string, maxWords: number): string {
+  return wordsOf(text).slice(0, maxWords).join(' ')
+}
+
+function clipBullet(text: string): string {
+  if (wordsOf(text).length > 60) {
+    return ''
+  }
+  return clipWords(text, 40)
+}
+
+function assertReadable(cv: CvDocument): void {
+  const text = [
+    cv.summary,
+    ...cv.skills.flatMap((group) => [group.category, ...group.items]),
+    ...cv.experience.flatMap((entry) => [
+      entry.title,
+      entry.company,
+      ...entry.bullets,
+    ]),
+    ...cv.education.flatMap((entry) => [
+      entry.institution,
+      entry.qualification,
+      entry.details,
+    ]),
+  ].join(' ')
+  const counts = new Map<string, number>()
+  for (const word of wordsOf(text)) {
+    const key = wordKey(word)
+    if (key.length < 4) {
+      continue
+    }
+    const count = (counts.get(key) ?? 0) + 1
+    if (count >= 12) {
+      fail(
+        'The tailored CV repeated the same words and was discarded. Please try again.',
+      )
+    }
+  }
+}
+
 function asStringList(value: unknown, label: string): string[] {
   if (value == null) {
     return []
@@ -263,11 +363,13 @@ function asSkills(value: unknown): CvSkillGroup[] {
     return items.length > 0 ? [{ category: 'Skills', items }] : []
   }
   return requireRecords(value, 'skills').flatMap((record) => {
-    const items = asStringList(record.items, 'skills').map(cleanBullet)
+    const items = asStringList(record.items, 'skills')
+      .map((item) => clipWords(item, 10))
+      .filter(Boolean)
     if (items.length === 0) {
       return []
     }
-    return [{ category: asString(record.category), items }]
+    return [{ category: clipWords(asString(record.category), 8), items }]
   })
 }
 
@@ -290,12 +392,15 @@ function asExperience(value: unknown): CvExperience[] {
   return requireRecords(value, 'experience').flatMap((record) => {
     const range = normalizeRange(asString(record.start), asString(record.end))
     const entry: CvExperience = {
-      title: asString(record.title),
-      company: asString(record.company),
-      location: asString(record.location),
+      title: clipTitle(asString(record.title)),
+      company: clipWords(asString(record.company), 8),
+      location: clipWords(asString(record.location), 8),
       start: range.start,
       end: range.end,
-      bullets: asStringList(record.bullets, 'experience bullets').map(cleanBullet),
+      bullets: asStringList(record.bullets, 'experience bullets')
+        .map(cleanBullet)
+        .map(clipBullet)
+        .filter(Boolean),
     }
     const hasContent = Boolean(
       entry.title ||
@@ -306,7 +411,7 @@ function asExperience(value: unknown): CvExperience[] {
         entry.bullets.length,
     )
     return hasContent ? [entry] : []
-  })
+  }).slice(0, 8)
 }
 
 function asEducation(value: unknown): CvEducation[] {
@@ -317,7 +422,7 @@ function asEducation(value: unknown): CvEducation[] {
       qualification: asString(record.qualification),
       start: range.start,
       end: range.end,
-      details: asString(record.details),
+      details: clipWords(asString(record.details), 40),
     }
     const hasContent = Boolean(
       entry.institution ||
@@ -336,14 +441,16 @@ export function parseCvDocument(raw: string): CvDocument {
     fail('The tailored CV JSON was not an object. Please try again.')
   }
   const record = value as Record<string, unknown>
-  return {
-    name: asString(record.name),
+  const cv: CvDocument = {
+    name: clipWords(asString(record.name), 8),
     contact: asContact(record.contact),
-    summary: asString(record.summary),
+    summary: clipWords(asString(record.summary), 90),
     skills: asSkills(record.skills),
     experience: asExperience(record.experience),
     education: asEducation(record.education),
   }
+  assertReadable(cv)
+  return cv
 }
 
 export function cvToPlainText(cv: CvDocument): string {

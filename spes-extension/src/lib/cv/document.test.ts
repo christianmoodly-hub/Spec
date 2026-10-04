@@ -78,6 +78,34 @@ describe('parseCvDocument', () => {
     ])
   })
 
+  it('keeps the real job title when the model repeats titles', () => {
+    const repeated = [
+      'Independent Developer / Support Specialistbal Direct Support Developer',
+      ...Array.from({ length: 30 }, () => 'Developer'),
+    ].join(' ')
+    const cv = parseCvDocument(
+      JSON.stringify({
+        name: 'Alex Morgan',
+        summary: 'Ships reliable software for small teams.',
+        experience: [
+          {
+            title: repeated,
+            company: 'Northwind',
+            start: 'Jan 2023',
+            end: 'Present',
+            bullets: ['Built a shared tracker for the team.'],
+          },
+        ],
+      }),
+    )
+    expect(cv.experience[0]?.title).toBe(
+      'Independent Developer / Support Specialist',
+    )
+    expect(cv.experience[0]?.bullets).toEqual([
+      'Built a shared tracker for the team.',
+    ])
+  })
+
   it('rejects malformed JSON', () => {
     expect(() => parseCvDocument('not json')).toThrow(/valid JSON/)
     expect(() => parseCvDocument('{"experience":"nope"}')).toThrow(/experience/)

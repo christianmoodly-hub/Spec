@@ -112,7 +112,8 @@ Rules:
 - Tailor the summary, skill ordering, and bullet wording to the job description, mirroring its keywords naturally.
 - NEVER invent experience, skills, employers, dates, or qualifications. Only reword and reprioritise what is in the base CV and reusable bullets.
 - Summary: 2-3 sentences max.
-- Bullets: start with a strong action verb, max 3-4 per role, one to two lines each.
+- Each experience title is one short title from the base CV, at most 8 words. Never list alternate titles or repeat a phrase.
+- Bullets: start with a strong action verb, max 4 per role, one sentence each.
 - Put a role's start date in "start" and its end date in "end". Use "Present" for a current role, never "Ongoing".
 - portfolio is the plain URL or site name from the base CV, or "" if there is none.
 - Use empty strings for unknown fields. Omit empty skill groups, roles, and education entries.
@@ -122,56 +123,67 @@ const CV_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   required: ['name', 'contact', 'summary', 'skills', 'experience', 'education'],
   properties: {
-    name: { type: 'STRING' },
+    name: { type: 'STRING', maxLength: 80 },
     contact: {
       type: 'OBJECT',
       properties: {
-        location: { type: 'STRING' },
-        phone: { type: 'STRING' },
-        email: { type: 'STRING' },
-        portfolio: { type: 'STRING' },
+        location: { type: 'STRING', maxLength: 80 },
+        phone: { type: 'STRING', maxLength: 40 },
+        email: { type: 'STRING', maxLength: 80 },
+        portfolio: { type: 'STRING', maxLength: 120 },
       },
     },
-    summary: { type: 'STRING' },
+    summary: { type: 'STRING', maxLength: 700 },
     skills: {
       type: 'ARRAY',
+      maxItems: 8,
       items: {
         type: 'OBJECT',
         properties: {
-          category: { type: 'STRING' },
-          items: { type: 'ARRAY', items: { type: 'STRING' } },
+          category: { type: 'STRING', maxLength: 60 },
+          items: {
+            type: 'ARRAY',
+            maxItems: 12,
+            items: { type: 'STRING', maxLength: 80 },
+          },
         },
       },
     },
     experience: {
       type: 'ARRAY',
+      maxItems: 8,
       items: {
         type: 'OBJECT',
         properties: {
-          title: { type: 'STRING' },
-          company: { type: 'STRING' },
-          location: { type: 'STRING' },
-          start: { type: 'STRING' },
-          end: { type: 'STRING' },
-          bullets: { type: 'ARRAY', items: { type: 'STRING' } },
+          title: { type: 'STRING', maxLength: 80 },
+          company: { type: 'STRING', maxLength: 80 },
+          location: { type: 'STRING', maxLength: 80 },
+          start: { type: 'STRING', maxLength: 24 },
+          end: { type: 'STRING', maxLength: 24 },
+          bullets: {
+            type: 'ARRAY',
+            maxItems: 4,
+            items: { type: 'STRING', maxLength: 280 },
+          },
         },
       },
     },
     education: {
       type: 'ARRAY',
+      maxItems: 6,
       items: {
         type: 'OBJECT',
         properties: {
-          institution: { type: 'STRING' },
-          qualification: { type: 'STRING' },
-          start: { type: 'STRING' },
-          end: { type: 'STRING' },
-          details: { type: 'STRING' },
+          institution: { type: 'STRING', maxLength: 100 },
+          qualification: { type: 'STRING', maxLength: 140 },
+          start: { type: 'STRING', maxLength: 24 },
+          end: { type: 'STRING', maxLength: 24 },
+          details: { type: 'STRING', maxLength: 240 },
         },
       },
     },
   },
-} as const
+}
 
 const COVER_PROMPT = `You write a short cover letter for a job application.
 Rules:
@@ -458,7 +470,7 @@ async function generateTailoredCv(user: string): Promise<string> {
         json: true,
         responseSchema: CV_RESPONSE_SCHEMA,
         thinkingLevel: 'LOW',
-        maxOutputTokens: 32768,
+        maxOutputTokens: 8192,
       })
       return JSON.stringify(parseCvDocument(raw))
     } catch (error) {
