@@ -5,6 +5,7 @@
  */
 
 import type { ProfileStructuredFields } from '../types'
+import { parseCvDocument } from './cv/document'
 import type { UnmatchedFormField } from './messages'
 import { asStructuredFields } from './profileFields'
 
@@ -84,15 +85,38 @@ Rules:
 - If options are listed, return one option's exact text, character-for-character.
 - Do not fill file, password, or hidden fields.`
 
-const CV_PROMPT = `You tailor a CV to one job for both ATS parsers and a human recruiter.
+const CV_PROMPT = `You tailor a CV to one job. Return ONLY valid JSON. No markdown, no code fences, no commentary.
+
+Use exactly this shape:
+{
+  "name": "",
+  "contact": { "location": "", "phone": "", "email": "", "portfolio": "" },
+  "summary": "",
+  "skills": [ { "category": "", "items": ["", ""] } ],
+  "experience": [
+    {
+      "title": "",
+      "company": "",
+      "location": "",
+      "start": "",
+      "end": "",
+      "bullets": ["", ""]
+    }
+  ],
+  "education": [
+    { "institution": "", "qualification": "", "start": "", "end": "", "details": "" }
+  ]
+}
+
 Rules:
-- Use ONLY facts from the base CV and reusable bullets. Do not invent jobs, dates, employers, tools, or achievements.
-- Echo keywords and phrasing from the job description only when they honestly match the base CV.
-- Reorder and rephrase to match this role. Drop or shorten weaker points.
-- Return plain text only: no markdown fences, commentary, tables, columns, icons, or graphics.
-- One column. Standard headings on their own lines, such as Summary, Skills, Experience, Education.
-- Under Experience, put job title, employer, and dates on simple lines, then short bullets that start with "- ".
-- Name and contact first if they appear in the base CV.`
+- Tailor the summary, skill ordering, and bullet wording to the job description, mirroring its keywords naturally.
+- NEVER invent experience, skills, employers, dates, or qualifications. Only reword and reprioritise what is in the base CV and reusable bullets.
+- Summary: 2-3 sentences max.
+- Bullets: start with a strong action verb, max 3-4 per role, one to two lines each.
+- Put a role's start date in "start" and its end date in "end". Use "Present" for a current role, never "Ongoing".
+- portfolio is the plain URL or site name from the base CV, or "" if there is none.
+- Use empty strings for unknown fields. Omit empty skill groups, roles, and education entries.
+- No extra keys.`
 
 const COVER_PROMPT = `You write a short cover letter for a job application.
 Rules:
@@ -121,6 +145,7 @@ async function generateContent(options: {
   user: string
   temperature: number
   json?: boolean
+  maxOutputTokens?: number
 }): Promise<string> {
   let lastError: Error | null = null
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -143,6 +168,7 @@ async function generateContentOnce(options: {
   user: string
   temperature: number
   json?: boolean
+  maxOutputTokens?: number
 }): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName()}:generateContent?key=${encodeURIComponent(apiKey())}`
   let response: Response
@@ -155,7 +181,7 @@ async function generateContentOnce(options: {
         contents: [{ role: 'user', parts: [{ text: options.user }] }],
         generationConfig: {
           temperature: options.temperature,
-          maxOutputTokens: 4096,
+          maxOutputTokens: options.maxOutputTokens ?? 4096,
           ...(options.json ? { responseMimeType: 'application/json' } : {}),
         },
       }),
@@ -331,12 +357,38 @@ export async function generateApplicationDoc(
     `Base CV:\n${baseCV}`,
     `Reusable bullets:\n${bulletBlock}`,
   ].join('\n\n')
-  const raw = await generateContent({
-    system: input.kind === 'cv' ? CV_PROMPT : COVER_PROMPT,
-    user,
-    temperature: 0.5,
-  })
-  return stripFences(raw)
+  if (input.kind === 'cover-letter') {
+    const raw = await generateContent({
+      system: COVER_PROMPT,
+      user,
+      temperature: 0.5,
+    })
+    return stripFences(raw)
+  }
+  return generateTailoredCv(user)
+}
+
+async function generateTailoredCv(user: string): Promise<string> {
+  let lastError: Error | null = null
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const system =
+      attempt === 0 || !lastError
+        ? CV_PROMPT
+        : `${CV_PROMPT}\n\nYour previous reply was rejected: ${lastError.message} Return ONLY the JSON object.`
+    const raw = await generateContent({
+      system,
+      user,
+      temperature: attempt === 0 ? 0.3 : 0.1,
+      json: true,
+      maxOutputTokens: 8192,
+    })
+    try {
+      return JSON.stringify(parseCvDocument(raw))
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+    }
+  }
+  throw lastError ?? new Error('The tailored CV was not valid JSON. Please try again.')
 }
 
 export async function parseProfileDump(

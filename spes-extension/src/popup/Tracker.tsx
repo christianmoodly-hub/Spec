@@ -29,6 +29,14 @@ import { dueFlag, dueSortValue, formatDue } from './dueDate'
 import { STATUS_LABELS } from './status'
 import { StreakPanel } from './StreakPanel'
 import {
+  cvDownloadName,
+  cvToPlainText,
+  parseCvDocument,
+  type CvDocument,
+} from '../lib/cv/document'
+import {
+  downloadCvDocx,
+  downloadCvPdf,
   downloadDraftDocx,
   downloadDraftPdf,
   draftFileName,
@@ -71,6 +79,9 @@ function formatDraftError(message: string | undefined): string {
   }
   if (/description/i.test(message)) {
     return 'Save a job description on this application first.'
+  }
+  if (/tailored cv|valid json/i.test(message)) {
+    return message
   }
   return "That didn't work. Please try again."
 }
@@ -308,7 +319,19 @@ export function Tracker({ user }: TrackerProps) {
     setCopied(false)
     const label = mode === 'cv' ? 'CV' : 'Cover-letter'
     try {
-      if (format === 'docx') {
+      if (mode === 'cv') {
+        const cv = parseCvDocument(trimmed)
+        const filename = cvDownloadName(
+          cv.name,
+          item.company || item.title,
+          format,
+        )
+        if (format === 'docx') {
+          await downloadCvDocx(cv, filename)
+        } else {
+          await downloadCvPdf(cv, filename)
+        }
+      } else if (format === 'docx') {
         await downloadDraftDocx(
           trimmed,
           draftFileName(label, item.company, item.title, 'docx'),
@@ -397,20 +420,34 @@ export function Tracker({ user }: TrackerProps) {
   }
 
   if (view.kind === 'draft') {
+    let cv: CvDocument | null = null
+    let cvError: string | null = null
+    if (view.mode === 'cv' && !view.generating && view.text.trim()) {
+      try {
+        cv = parseCvDocument(view.text)
+      } catch (caught) {
+        cvError =
+          caught instanceof Error
+            ? caught.message
+            : 'The tailored CV was not valid JSON.'
+      }
+    }
     return (
       <DraftPanel
         heading={view.mode === 'cv' ? 'Tailored CV' : 'Cover letter'}
         text={view.text}
+        variant={view.mode === 'cv' ? 'cv' : 'text'}
+        cv={cv}
         generating={view.generating}
         busy={busy}
-        error={error}
+        error={error ?? cvError}
         notice={copied ? 'Copied.' : null}
         onChange={(text) =>
           setView((current) =>
             current.kind === 'draft' ? { ...current, text } : current,
           )
         }
-        onCopy={() => void copyDraft(view.text)}
+        onCopy={() => void copyDraft(cv ? cvToPlainText(cv) : view.text)}
         onDownloadWord={() =>
           void downloadDraft(view.item, view.mode, view.text, 'docx')
         }

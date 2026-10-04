@@ -1,3 +1,5 @@
+import type { CvDocument } from './cv/document'
+
 function fileStem(value: string): string {
   const safe = value
     .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ')
@@ -61,6 +63,22 @@ export async function downloadDraftDocx(
   })
   const blob = await Packer.toBlob(doc)
   saveBlob(blob, filename)
+}
+
+export async function downloadCvDocx(
+  cv: CvDocument,
+  filename: string,
+): Promise<void> {
+  const { renderCvDocxBlob } = await import('./cv/renderDocx')
+  saveBlob(await renderCvDocxBlob(cv), filename)
+}
+
+export async function downloadCvPdf(
+  cv: CvDocument,
+  filename: string,
+): Promise<void> {
+  const { renderCvPdfBlob } = await import('./cv/renderPdf')
+  saveBlob(renderCvPdfBlob(cv), filename)
 }
 
 export async function downloadDraftPdf(

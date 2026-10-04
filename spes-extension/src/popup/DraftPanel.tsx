@@ -1,6 +1,11 @@
+import type { CvDocument } from '../lib/cv/document'
+import { CvPreview } from './CvPreview'
+
 interface DraftPanelProps {
   heading: string
   text: string
+  variant: 'cv' | 'text'
+  cv: CvDocument | null
   generating: boolean
   busy: boolean
   error: string | null
@@ -16,6 +21,8 @@ interface DraftPanelProps {
 export function DraftPanel({
   heading,
   text,
+  variant,
+  cv,
   generating,
   busy,
   error,
@@ -27,13 +34,15 @@ export function DraftPanel({
   onSave,
   onClose,
 }: DraftPanelProps) {
-  const empty = generating || busy || !text.trim()
+  const empty = generating || busy || (variant === 'cv' ? !cv : !text.trim())
   return (
     <section className="draft-panel">
       <h2>{heading}</h2>
       {generating ? (
         <p className="hint">Generating…</p>
-      ) : (
+      ) : variant === 'cv' && cv ? (
+        <CvPreview cv={cv} />
+      ) : variant === 'cv' ? null : (
         <textarea
           value={text}
           onChange={(event) => onChange(event.target.value)}
@@ -66,9 +75,9 @@ export function DraftPanel({
         </button>
       </div>
       <p className="hint">
-        Nothing is stored until you save this version. Close discards the draft.
-        Downloads use the text in the box now. Word is the safer ATS upload;
-        PDF is fine for a person to read.
+        {variant === 'cv'
+          ? 'This preview is the CV that downloads as PDF and Word. Nothing is stored until you save this version.'
+          : 'Nothing is stored until you save this version. Close discards the draft. Downloads use the text in the box now.'}
       </p>
     </section>
   )
